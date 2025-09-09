@@ -37,11 +37,6 @@ impl Cpu {
             }
         }
 
-        if self.mmu.booting && self.registers.pc.read() == 0x100 {
-            self.mmu.booting = false;
-            log::info!("cycle: finished booting");
-        }
-
         self.cycles += 1;
 
         log::trace!("cycle: cpu state: {:?}", self.registers);
@@ -85,6 +80,9 @@ impl Cpu {
             0xea => self.ld_ptr_u16_a()?,
             0x18 => self.jr_i8()?,
             0xf0 => self.ld_a_ptr_ff00_u8()?,
+            0x90..=0x95 | 0x97 => self.sub_a_r8(opcode)?,
+            0xbe => self.cp_a_ptr_hl()?,
+            0x86 => self.add_a_ptr_hl()?,
             0xcb => {
                 let opcode = self.mmu.read(self.registers.pc.read() + 1)?;
                 match opcode {
@@ -413,6 +411,23 @@ impl Cpu {
         Ok(())
     }
 
+    fn cp_a_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.hl.read())?;
+        let a = self.registers.af.high.read();
+
+        self.registers.af.low.z = a == arg;
+        self.registers.af.low.n = true;
+        self.registers.af.low.c = arg > a;
+        self.registers.af.low.h = {
+            let (x, _) = (arg & 0x0f).overflowing_sub(a & 0x0f);
+            (x & 0x10) > 0
+        };
+
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+
     fn ld_ptr_u16_a(&mut self) -> anyhow::Result<()> {
         let low = self.mmu.read(self.registers.pc.read() + 1)?;
         let high = self.mmu.read(self.registers.pc.read() + 2)?;
@@ -447,6 +462,48 @@ impl Cpu {
         self.registers.pc += 2;
         self.delay += 3;
 
+        Ok(())
+    }
+
+    fn sub_a_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = opcode & 0b00000111;
+        let arg = self.registers.get_r8(reg).read();
+
+        let a = self.registers.af.high.read();
+
+        self.registers.af.low.z = a == arg;
+        self.registers.af.low.n = true;
+        self.registers.af.low.c = arg > a;
+        self.registers.af.low.h = {
+            let (x, _) = (arg & 0x0f).overflowing_sub(a & 0x0f);
+            (x & 0x10) > 0
+        };
+
+        let (val, _) = a.overflowing_sub(arg);
+        self.registers.af.high.write(val);
+
+        self.registers.pc += 1;
+        self.delay += 1;
+        Ok(())
+    }
+
+    fn add_a_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.hl.read())?;
+        let a = self.registers.af.high.read();
+
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = {
+            let (x, _) = (arg & 0x0f).overflowing_add(a & 0x0f);
+            (x & 0x10) > 0
+        };
+
+        let (val, overflow) = a.overflowing_add(arg);
+        self.registers.af.high.write(val);
+        self.registers.af.low.c = overflow;
+        self.registers.af.low.z = val == 0;
+        self.registers.pc += 1;
+
+        self.delay += 2;
         Ok(())
     }
 }

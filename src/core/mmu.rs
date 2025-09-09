@@ -7,11 +7,11 @@ pub struct IoRegisters {
     lcdc: u8, // 0xff40
     scy: u8,  // 0xff42
     ly: u8,   // 0xff44
+    bank: u8, // 0xff50 - bootrom mapping control
 }
 
 #[derive(Debug)]
 pub struct Mmu {
-    pub booting: bool,
     interrupt: u8,
     rom: Vec<u8>,
     rom_banks: Vec<Vec<u8>>,
@@ -39,7 +39,6 @@ impl Mmu {
 
         Self {
             io,
-            booting: true,
             interrupt: 0,
             rom: low_rom,
             rom_banks,
@@ -57,7 +56,7 @@ impl Mmu {
         let a = addr as usize;
         match a {
             0x0..=0xff => {
-                if self.booting {
+                if self.io.bank == 0 {
                     Ok(BOOT[a])
                 } else {
                     Ok(self.rom[a])
@@ -117,7 +116,7 @@ impl Mmu {
             }
             0xfea0..=0xfefe => Err(anyhow!("mmu: write: prohibited write at {a:x?}")),
             0xff00..=0xff7f => match a {
-                0xff11 | 0xff12 | 0xff24 | 0xff25 | 0xff26 => {
+                0xff11 | 0xff12 | 0xff13 | 0xff14 | 0xff24 | 0xff25 | 0xff26 => {
                     log::info!("FIXME: mmu: write to sound register {a:x?}");
                     Ok(())
                 }
@@ -135,6 +134,10 @@ impl Mmu {
                 }
                 0xff47 => {
                     log::info!("FIXME: mmu: write to bg palette {val:x?}");
+                    Ok(())
+                }
+                0xff50 => {
+                    self.io.bank = val;
                     Ok(())
                 }
 
