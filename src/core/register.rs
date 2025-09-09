@@ -218,9 +218,20 @@ impl CpuRegisters {
             0b001 => &mut self.bc.low,
             0b010 => &mut self.de.high,
             0b011 => &mut self.de.low,
+            0b100 => &mut self.hl.high,
             0b101 => &mut self.hl.low,
             0b111 => &mut self.af.high,
             _ => unreachable!(),
+        }
+    }
+
+    pub fn get_cond(&self, code: u8) -> bool {
+        match code {
+            0b00 => self.af.low.z == false,
+            0b01 => self.af.low.z == true,
+            0b10 => self.af.low.c == false,
+            0b11 => self.af.low.c == true,
+            _ => unreachable!("get_cond: unknown code: 0x{code:x?}"),
         }
     }
 }

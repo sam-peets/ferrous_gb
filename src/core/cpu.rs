@@ -50,9 +50,7 @@ impl Cpu {
                     | 0x6f
                     | 0x70..=0x75
                     | 0x77..=0x7d
-                    | 0x7f => {
-                        todo!()
-                    }
+                    | 0x7f => self.bit_b_r(opcode),
                     _ => Err(anyhow!("cycle: unknown CB opcode: {opcode:x?}")),
                 }
             }?,
@@ -107,6 +105,36 @@ impl Cpu {
         self.registers.hl -= 1;
         self.registers.pc += 1;
         self.delay += 1;
+        Ok(())
+    }
+
+    fn bit_b_r(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let register = opcode & 0b00000111;
+        let bit = (opcode & 0b00111000) >> 3;
+        let target = self.registers.get_r8(register);
+        self.registers.af.low.z = (target.read() & (1 << bit)) > 0;
+        self.registers.af.low.h = true;
+        self.registers.af.low.n = false;
+        self.delay += 1;
+        self.registers.pc += 2;
+        Ok(())
+    }
+
+    fn jr_cond_i8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let offset: u8 = self.mmu.read(self.registers.pc.read() + 1)?;
+        let offset = offset as i8;
+        let offset = offset as i16 + 2; // per reference
+        let cond = self.registers.get_cond(opcode);
+        log::trace!("jr_cond_i8: conditional jump to 0x{offset:x?}, {cond}");
+
+        if cond {
+            let pc = self.registers.pc.read() as i16;
+            let pc = pc + offset;
+            let pc = pc as u16;
+            self.registers.pc.write(pc);
+        } else {
+            todo!()
+        }
         Ok(())
     }
 }
