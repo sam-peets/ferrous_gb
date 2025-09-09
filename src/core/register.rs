@@ -202,13 +202,23 @@ pub struct CpuRegisters {
 }
 
 impl CpuRegisters {
-    pub fn get_r16(&mut self, code: u8) -> &mut dyn Register<Item = u16> {
+    pub fn get_r16_ss(&mut self, code: u8) -> &mut dyn Register<Item = u16> {
         match code {
             0b00 => &mut self.bc,
             0b01 => &mut self.de,
             0b10 => &mut self.hl,
             0b11 => &mut self.sp,
-            _ => unreachable!(),
+            _ => unreachable!("get_r16_ss: unknown code: 0x{code:x?}"),
+        }
+    }
+
+    pub fn get_r16_qq(&mut self, code: u8) -> &mut dyn Register<Item = u16> {
+        match code {
+            0b00 => &mut self.bc,
+            0b01 => &mut self.de,
+            0b10 => &mut self.hl,
+            0b11 => &mut self.af,
+            _ => unreachable!("get_r16_qq: unknown code: 0x{code:x?}"),
         }
     }
 
@@ -221,7 +231,7 @@ impl CpuRegisters {
             0b100 => &mut self.hl.high,
             0b101 => &mut self.hl.low,
             0b111 => &mut self.af.high,
-            _ => unreachable!(),
+            _ => unreachable!("get_r8: unknown code: 0x{code:x?}"),
         }
     }
 
