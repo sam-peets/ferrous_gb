@@ -40,7 +40,7 @@ impl Screen {
         let frame = match self.frame() {
             Ok(x) => x,
             Err(e) => {
-                log::info!("screen: crashed after {} opcodes", self.cpu.cycles);
+                log::info!("screen: crashed after {} cycles", self.cpu.cycles);
                 panic!("error: {e}");
             }
         };
