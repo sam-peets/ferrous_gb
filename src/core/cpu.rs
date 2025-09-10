@@ -4,6 +4,7 @@ use anyhow::anyhow;
 
 use crate::core::{
     mmu::Mmu,
+    ppu::Ppu,
     register::{CpuRegisters, Register},
 };
 
@@ -13,6 +14,7 @@ pub struct Cpu {
     mmu: Mmu,
     delay: usize,
     pub cycles: usize,
+    pub ppu: Ppu,
 }
 
 impl Cpu {
@@ -22,6 +24,7 @@ impl Cpu {
             mmu: Mmu::new(rom),
             delay: 0,
             cycles: 0,
+            ppu: Ppu::new(),
         }
     }
 
