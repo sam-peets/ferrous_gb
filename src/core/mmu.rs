@@ -6,6 +6,7 @@ const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 pub struct IoRegisters {
     pub lcdc: u8, // 0xff40
     pub scy: u8,  // 0xff42
+    pub scx: u8,  // 0xff43
     pub ly: u8,   // 0xff44
     pub bank: u8, // 0xff50 - bootrom mapping control
 }
@@ -72,6 +73,7 @@ impl Mmu {
             0xff00..=0xff7f => match a {
                 0xff40 => Ok(self.io.lcdc),
                 0xff42 => Ok(self.io.scy),
+                0xff43 => Ok(self.io.scx),
                 0xff44 => Ok(self.io.ly),
                 _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
             },
@@ -127,6 +129,11 @@ impl Mmu {
                 0xff42 => {
                     log::info!("mmu: SCY write: {val:x?}");
                     self.io.scy = val;
+                    Ok(())
+                }
+                0xff42 => {
+                    log::info!("mmu: SCY write: {val:x?}");
+                    self.io.scx = val;
                     Ok(())
                 }
                 0xff44 => {
