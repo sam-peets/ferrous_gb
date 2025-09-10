@@ -1227,7 +1227,6 @@ dependencies = [
  "log",
  "poll-promise",
  "rfd",
- "serde",
  "wasm-bindgen-futures",
  "web-sys",
 ]
