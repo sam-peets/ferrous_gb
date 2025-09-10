@@ -4,10 +4,10 @@ const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 
 #[derive(Default, Debug)]
 pub struct IoRegisters {
-    lcdc: u8, // 0xff40
-    scy: u8,  // 0xff42
-    ly: u8,   // 0xff44
-    bank: u8, // 0xff50 - bootrom mapping control
+    pub lcdc: u8, // 0xff40
+    pub scy: u8,  // 0xff42
+    pub ly: u8,   // 0xff44
+    pub bank: u8, // 0xff50 - bootrom mapping control
 }
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ pub struct Mmu {
     wram: Vec<u8>,
     oam: Vec<u8>,
     hram: Vec<u8>,
-    io: IoRegisters,
+    pub io: IoRegisters,
 }
 
 impl Mmu {
@@ -33,7 +33,6 @@ impl Mmu {
         }
 
         let io = IoRegisters {
-            ly: 0x90,
             ..Default::default()
         };
 
@@ -121,15 +120,18 @@ impl Mmu {
                     Ok(())
                 }
                 0xff40 => {
+                    log::info!("mmu: LCDC write: {val:x?}");
                     self.io.lcdc = val;
                     Ok(())
                 }
                 0xff42 => {
+                    log::info!("mmu: SCY write: {val:x?}");
                     self.io.scy = val;
                     Ok(())
                 }
                 0xff44 => {
-                    self.io.ly = val;
+                    // read-only
+                    // self.io.ly = val;
                     Ok(())
                 }
                 0xff47 => {

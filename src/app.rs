@@ -35,7 +35,7 @@ impl eframe::App for TemplateApp {
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                if ui.button("Hello").clicked() {
+                if ui.button("Open ROM").clicked() {
                     self.promise = Some(poll_promise::Promise::spawn_local(async {
                         if let Some(file) = rfd::AsyncFileDialog::new().pick_file().await {
                             let f = file.read().await;
@@ -48,7 +48,6 @@ impl eframe::App for TemplateApp {
             })
         });
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("hello vro </3");
             if let Some(screen) = &mut self.screen {
                 screen.ui(ui);
             }

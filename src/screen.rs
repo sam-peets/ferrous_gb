@@ -14,16 +14,16 @@ impl Screen {
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
         for i in 0..70224 {
             // is this right?
-            self.cpu.ppu.clock()?;
-            self.cpu.ppu.clock()?;
-            self.cpu.ppu.clock()?;
-            self.cpu.ppu.clock()?;
+            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
+            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
+            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
+            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
             self.cpu.cycle()?;
         }
         let f = self
             .cpu
             .ppu
-            .frame()
+            .frame(&mut self.cpu.mmu)?
             .iter()
             .map(|x| match x {
                 0 => Color32::from_gray(0),
@@ -40,8 +40,8 @@ impl Screen {
         let frame = match self.frame() {
             Ok(x) => x,
             Err(e) => {
-                // todo
-                vec![Color32::GRAY; 160 * 144]
+                log::info!("screen: crashed after {} opcodes", self.cpu.cycles);
+                panic!("error: {e}");
             }
         };
         self.texture.set(

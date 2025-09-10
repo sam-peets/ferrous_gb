@@ -11,7 +11,7 @@ use crate::core::{
 #[derive(Debug)]
 pub struct Cpu {
     registers: CpuRegisters,
-    mmu: Mmu,
+    pub mmu: Mmu,
     delay: usize,
     pub cycles: usize,
     pub ppu: Ppu,
@@ -29,6 +29,7 @@ impl Cpu {
     }
 
     pub fn cycle(&mut self) -> anyhow::Result<()> {
+        self.cycles += 1;
         match self.delay {
             0 => {}
             1 => {
@@ -40,14 +41,29 @@ impl Cpu {
             }
         }
 
-        self.cycles += 1;
-
         log::trace!("cycle: cpu state: {:?}", self.registers);
         let opcode = self.mmu.read(self.registers.pc.read())?;
         log::trace!(
             "cycle: opcode 0x{opcode:x?}, pc: 0x{:x?}",
             self.registers.pc.read()
         );
+        // println!(
+        //     "A: {:02X?} F: {:02X?} B: {:02X?} C: {:02X?} D: {:02X?} E: {:02X?} H: {:02X?} L: {:02X?} SP: {:04X?} PC: 00:{:04X?} ({:02X?} {:02X?} {:02X?} {:02X?})",
+        //     self.registers.af.high.read(),
+        //     self.registers.af.low.read(),
+        //     self.registers.bc.high.read(),
+        //     self.registers.bc.low.read(),
+        //     self.registers.de.high.read(),
+        //     self.registers.de.low.read(),
+        //     self.registers.hl.high.read(),
+        //     self.registers.hl.low.read(),
+        //     self.registers.sp.read(),
+        //     self.registers.pc.read(),
+        //     self.mmu.read(self.registers.pc.read() + 0)?,
+        //     self.mmu.read(self.registers.pc.read() + 1)?,
+        //     self.mmu.read(self.registers.pc.read() + 2)?,
+        //     self.mmu.read(self.registers.pc.read() + 3)?,
+        // );
         match opcode {
             0x01 | 0x11 | 0x21 | 0x31 => self.ld_r16_u16(opcode)?,
             0xa8..=0xad | 0xaf => self.xor_a_r(opcode)?,
@@ -405,7 +421,7 @@ impl Cpu {
         self.registers.af.low.n = true;
         self.registers.af.low.c = arg > a;
         self.registers.af.low.h = {
-            let (x, _) = (arg & 0x0f).overflowing_sub(a & 0x0f);
+            let (x, _) = (a & 0x0f).overflowing_sub(arg & 0x0f);
             (x & 0x10) > 0
         };
 
@@ -422,7 +438,7 @@ impl Cpu {
         self.registers.af.low.n = true;
         self.registers.af.low.c = arg > a;
         self.registers.af.low.h = {
-            let (x, _) = (arg & 0x0f).overflowing_sub(a & 0x0f);
+            let (x, _) = (a & 0x0f).overflowing_sub(arg & 0x0f);
             (x & 0x10) > 0
         };
 
@@ -478,7 +494,7 @@ impl Cpu {
         self.registers.af.low.n = true;
         self.registers.af.low.c = arg > a;
         self.registers.af.low.h = {
-            let (x, _) = (arg & 0x0f).overflowing_sub(a & 0x0f);
+            let (x, _) = (a & 0x0f).overflowing_sub(arg & 0x0f);
             (x & 0x10) > 0
         };
 
@@ -496,7 +512,7 @@ impl Cpu {
 
         self.registers.af.low.n = false;
         self.registers.af.low.h = {
-            let (x, _) = (arg & 0x0f).overflowing_add(a & 0x0f);
+            let (x, _) = (a & 0x0f).overflowing_add(arg & 0x0f);
             (x & 0x10) > 0
         };
 
