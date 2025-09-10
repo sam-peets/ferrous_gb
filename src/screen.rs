@@ -12,7 +12,7 @@ impl Screen {
         Screen { cpu, texture }
     }
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
-        for i in 0..70224 {
+        for i in 0..(70224 / 4) {
             // is this right?
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
@@ -26,10 +26,10 @@ impl Screen {
             .frame(&mut self.cpu.mmu)?
             .iter()
             .map(|x| match x {
-                0 => Color32::from_gray(0),
-                1 => Color32::from_gray(86),
-                2 => Color32::from_gray(172),
-                3 => Color32::from_gray(255),
+                3 => Color32::from_gray(0),
+                2 => Color32::from_gray(86),
+                1 => Color32::from_gray(172),
+                0 => Color32::from_gray(255),
                 _ => unreachable!(),
             })
             .collect();

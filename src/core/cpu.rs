@@ -102,6 +102,12 @@ impl Cpu {
             0x90..=0x95 | 0x97 => self.sub_a_r8(opcode)?,
             0xbe => self.cp_a_ptr_hl()?,
             0x86 => self.add_a_ptr_hl()?,
+            0x00 => self.nop()?,
+            0xc3 => self.jp_u16()?,
+            0x2a => self.ld_a_ptr_hli()?,
+            0x3a => self.ld_a_ptr_hld()?,
+            0x02 => self.ld_ptr_bc_a()?,
+            0x12 => self.ld_ptr_de_a()?,
             0xcb => {
                 let opcode = self.mmu.read(self.registers.pc.read() + 1)?;
                 match opcode {
@@ -522,6 +528,52 @@ impl Cpu {
         self.registers.af.low.z = val == 0;
         self.registers.pc += 1;
 
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn nop(&mut self) -> anyhow::Result<()> {
+        self.registers.pc += 1;
+        self.delay += 1;
+        Ok(())
+    }
+
+    fn jp_u16(&mut self) -> anyhow::Result<()> {
+        let low = self.mmu.read(self.registers.pc.read() + 1)?;
+        let high = self.mmu.read(self.registers.pc.read() + 2)?;
+        let addr = ((high as u16) << 8) | (low as u16);
+        self.registers.pc.write(addr);
+        self.delay += 4;
+        Ok(())
+    }
+
+    fn ld_a_ptr_hli(&mut self) -> anyhow::Result<()> {
+        let val = self.mmu.read(self.registers.hl.read())?;
+        self.registers.af.high.write(val);
+        self.registers.hl += 1;
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+    fn ld_a_ptr_hld(&mut self) -> anyhow::Result<()> {
+        let val = self.mmu.read(self.registers.hl.read())?;
+        self.registers.af.high.write(val);
+        self.registers.hl -= 1;
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+    fn ld_ptr_de_a(&mut self) -> anyhow::Result<()> {
+        self.mmu
+            .write(self.registers.de.read(), self.registers.af.high.read())?;
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+    fn ld_ptr_bc_a(&mut self) -> anyhow::Result<()> {
+        self.mmu
+            .write(self.registers.bc.read(), self.registers.af.high.read())?;
+        self.registers.pc += 1;
         self.delay += 2;
         Ok(())
     }

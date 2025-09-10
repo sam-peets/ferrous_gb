@@ -54,7 +54,17 @@ impl Ppu {
     //     Ok(f)
     // }
     pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
-        Ok(self.screen.clone())
+        Ok(self
+            .screen
+            .iter()
+            .map(|x| match x {
+                0b00 => mmu.io.bgp & 0b00000011,
+                0b01 => (mmu.io.bgp & 0b00001100) >> 2,
+                0b10 => (mmu.io.bgp & 0b00110000) >> 4,
+                0b11 => (mmu.io.bgp & 0b11000000) >> 6,
+                _ => unreachable!("ppu: frame: invalid color {x:02x?}"),
+            })
+            .collect())
     }
     pub fn clock(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
         // println!(

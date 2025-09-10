@@ -8,6 +8,7 @@ pub struct IoRegisters {
     pub scy: u8,  // 0xff42
     pub scx: u8,  // 0xff43
     pub ly: u8,   // 0xff44
+    pub bgp: u8,  // 0xff47
     pub bank: u8, // 0xff50 - bootrom mapping control
 }
 
@@ -30,7 +31,7 @@ impl Mmu {
         let low_rom = rom[0..0x3fff].to_vec();
         let mut rom_banks = Vec::new();
         for i in 1..rom.len() / 0x3fff {
-            rom_banks.push(rom[(i * 0x3fff)..((i + 1) * 0x3fff)].to_vec());
+            rom_banks.push(rom[(i * 0x4000)..((i + 1) * 0x4000)].to_vec());
         }
 
         let io = IoRegisters {
@@ -75,6 +76,7 @@ impl Mmu {
                 0xff42 => Ok(self.io.scy),
                 0xff43 => Ok(self.io.scx),
                 0xff44 => Ok(self.io.ly),
+                // 0xff44 => Ok(0x90),
                 _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
             },
             0xff80..=0xfffe => Ok(self.hram[a - 0xff80]),
@@ -122,17 +124,17 @@ impl Mmu {
                     Ok(())
                 }
                 0xff40 => {
-                    log::info!("mmu: LCDC write: {val:x?}");
+                    log::info!("mmu: LCDC write: 0x{val:x?}");
                     self.io.lcdc = val;
                     Ok(())
                 }
                 0xff42 => {
-                    log::info!("mmu: SCY write: {val:x?}");
+                    log::info!("mmu: SCY write: 0x{val:x?}");
                     self.io.scy = val;
                     Ok(())
                 }
                 0xff42 => {
-                    log::info!("mmu: SCY write: {val:x?}");
+                    log::info!("mmu: SCY write: 0x{val:x?}");
                     self.io.scx = val;
                     Ok(())
                 }
@@ -142,7 +144,8 @@ impl Mmu {
                     Ok(())
                 }
                 0xff47 => {
-                    log::info!("FIXME: mmu: write to bg palette {val:x?}");
+                    log::info!("mmu: BGP write: 0x{val:x?}");
+                    self.io.bgp = val;
                     Ok(())
                 }
                 0xff50 => {
@@ -150,7 +153,9 @@ impl Mmu {
                     Ok(())
                 }
 
-                _ => Err(anyhow!("mmu: write: unimplemented IO reg write at {a:x?}")),
+                _ => Err(anyhow!(
+                    "mmu: write: unimplemented IO reg write at 0x{a:x?}"
+                )),
             },
             0xff80..=0xfffe => {
                 self.hram[a - 0xff80] = val;

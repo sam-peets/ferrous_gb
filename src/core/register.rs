@@ -12,28 +12,32 @@ pub struct Register16 {
 impl AddAssign<u16> for Register16 {
     fn add_assign(&mut self, rhs: u16) {
         let s: u16 = (*self).into();
-        *self = (s + rhs).into()
+        let (s, _) = s.overflowing_add(rhs);
+        *self = s.into()
     }
 }
 
 impl SubAssign<u16> for Register16 {
     fn sub_assign(&mut self, rhs: u16) {
         let s: u16 = (*self).into();
-        *self = (s - rhs).into()
+        let (s, _) = s.overflowing_sub(rhs);
+        *self = s.into()
     }
 }
 
 impl MulAssign<u16> for Register16 {
     fn mul_assign(&mut self, rhs: u16) {
         let s: u16 = (*self).into();
-        *self = (s * rhs).into()
+        let (s, _) = s.overflowing_mul(rhs);
+        *self = s.into()
     }
 }
 
 impl DivAssign<u16> for Register16 {
     fn div_assign(&mut self, rhs: u16) {
         let s: u16 = (*self).into();
-        *self = (s / rhs).into()
+        let (s, _) = s.overflowing_div(rhs);
+        *self = s.into()
     }
 }
 
