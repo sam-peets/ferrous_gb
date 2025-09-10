@@ -15,6 +15,7 @@ pub struct Cpu {
     delay: usize,
     pub cycles: usize,
     pub ppu: Ppu,
+    ei: bool,
 }
 
 impl Cpu {
@@ -25,7 +26,20 @@ impl Cpu {
             delay: 0,
             cycles: 0,
             ppu: Ppu::new(),
+            ei: false,
         }
+    }
+
+    pub fn new_fastboot(rom: Vec<u8>) -> Self {
+        let mut cpu = Cpu::new(rom);
+        cpu.registers.af.write(0x0180);
+        cpu.registers.bc.write(0x0013);
+        cpu.registers.de.write(0x00d8);
+        cpu.registers.hl.write(0x014d);
+        cpu.registers.pc.write(0x0100);
+        cpu.registers.sp.write(0xfffe);
+        cpu.mmu.io.bank = 0xff;
+        cpu
     }
 
     pub fn cycle(&mut self) -> anyhow::Result<()> {
@@ -108,6 +122,13 @@ impl Cpu {
             0x3a => self.ld_a_ptr_hld()?,
             0x02 => self.ld_ptr_bc_a()?,
             0x12 => self.ld_ptr_de_a()?,
+            0xf3 => self.di()?,
+            0xfb => self.ei()?,
+            0x36 => self.ld_ptr_hl_u8()?,
+            0x0b | 0x1b | 0x2b | 0x3b => self.dec_r16(opcode)?,
+            0xb0..=0xb5 | 0xb7 => self.or_a_r8(opcode)?,
+            0x2f => self.cpl()?,
+            0xe6 => self.and_a_u8()?,
             0xcb => {
                 let opcode = self.mmu.read(self.registers.pc.read() + 1)?;
                 match opcode {
@@ -576,5 +597,82 @@ impl Cpu {
         self.registers.pc += 1;
         self.delay += 2;
         Ok(())
+    }
+
+    fn di(&mut self) -> anyhow::Result<()> {
+        self.ei = false;
+        self.registers.pc += 1;
+        self.delay += 1;
+        Ok(())
+    }
+    fn ld_ptr_hl_u8(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.pc.read() + 1)?;
+        self.mmu.write(self.registers.hl.read(), arg)?;
+        self.registers.pc += 2;
+        self.delay += 3;
+        Ok(())
+    }
+
+    fn dec_r16(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = (opcode & 0b00110000) >> 4;
+        let target = self.registers.get_r16_ss(reg);
+        let val = target.read();
+        let (val, _) = val.overflowing_sub(1);
+        target.write(val);
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn or_a_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = opcode & 0b00000111;
+
+        let target = {
+            let r = self.registers.get_r8(reg);
+            r.read()
+        };
+        let a = self.registers.af.high.read();
+        let val = target | a;
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = false;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+        self.registers.af.high.write(val);
+        self.registers.pc += 1;
+        self.delay += 1;
+        Ok(())
+    }
+    fn ei(&mut self) -> anyhow::Result<()> {
+        self.ei = true;
+        self.registers.pc += 1;
+        self.delay += 1;
+        Ok(())
+    }
+
+    fn cpl(&mut self) -> anyhow::Result<()> {
+        let val = self.registers.af.high.read();
+        self.registers.af.high.write(!val);
+        self.registers.af.low.h = true;
+        self.registers.af.low.n = true;
+        self.registers.pc += 1;
+        self.delay += 1;
+        Ok(())
+    }
+    fn and_a_u8(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.pc.read() + 1)?;
+        let a = self.registers.af.high.read();
+        let val = a & arg;
+        self.registers.af.high.write(val);
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = true;
+        self.registers.af.low.c = false;
+        self.registers.pc += 2;
+        self.delay += 2;
+
+        Ok(())
+    }
+    fn swap_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        todo!()
     }
 }

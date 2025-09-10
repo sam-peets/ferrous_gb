@@ -22,7 +22,8 @@ impl eframe::App for TemplateApp {
         if let Some(promise) = &self.promise {
             if let Some(Some(rom)) = promise.ready() {
                 self.screen = Some(Screen {
-                    cpu: Cpu::new(rom.clone()),
+                    // cpu: Cpu::new(rom.clone()),
+                    cpu: Cpu::new_fastboot(rom.clone()),
                     texture: ctx.load_texture(
                         "screen",
                         egui::ColorImage::filled([160, 144], Color32::BLACK),

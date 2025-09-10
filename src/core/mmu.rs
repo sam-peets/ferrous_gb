@@ -4,12 +4,18 @@ const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 
 #[derive(Default, Debug)]
 pub struct IoRegisters {
-    pub lcdc: u8, // 0xff40
-    pub scy: u8,  // 0xff42
-    pub scx: u8,  // 0xff43
-    pub ly: u8,   // 0xff44
-    pub bgp: u8,  // 0xff47
-    pub bank: u8, // 0xff50 - bootrom mapping control
+    pub joyp: u8,      // ff00
+    pub sc: u8,        // ff02
+    pub interrupt: u8, // 0xff0f
+    pub lcdc: u8,      // 0xff40
+    pub stat: u8,      // 0xff41
+    pub scy: u8,       // 0xff42
+    pub scx: u8,       // 0xff43
+    pub ly: u8,        // 0xff44
+    pub bgp: u8,       // 0xff47
+    pub obp0: u8,      // 0xff48
+    pub obp1: u8,      // 0xff49
+    pub bank: u8,      // 0xff50 - bootrom mapping control
 }
 
 #[derive(Debug)]
@@ -70,13 +76,19 @@ impl Mmu {
             0xc000..=0xdfff => Ok(self.wram[a - 0xc000]),
             0xe000..=0xfdff => self.read(addr - 0x2000), // echo ram
             0xfe00..=0xfe9f => Ok(self.oam[a - 0xfe00]),
-            0xfea0..=0xfefe => Err(anyhow!("prohibited read at {a:x?}")),
+            // 0xfea0..=0xfeff => Err(anyhow!("prohibited read at {a:x?}")),
+            0xfea0..=0xfeff => Ok(0xff), // invalid read, just return 0xff
             0xff00..=0xff7f => match a {
+                0xff00 => Ok(self.io.joyp | 0b00001111),
+                0xff02 => Ok(self.io.sc),
+                0xff0f => Ok(self.io.interrupt),
                 0xff40 => Ok(self.io.lcdc),
+                0xff41 => Ok(self.io.stat),
                 0xff42 => Ok(self.io.scy),
                 0xff43 => Ok(self.io.scx),
                 0xff44 => Ok(self.io.ly),
-                // 0xff44 => Ok(0x90),
+                0xff48 => Ok(self.io.obp0),
+                0xff49 => Ok(self.io.obp1),
                 _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
             },
             0xff80..=0xfffe => Ok(self.hram[a - 0xff80]),
@@ -117,10 +129,24 @@ impl Mmu {
                 self.oam[a - 0xfe00] = val;
                 Ok(())
             }
-            0xfea0..=0xfefe => Err(anyhow!("mmu: write: prohibited write at {a:x?}")),
+            0xfea0..=0xfeff => Ok(()), // invalid write, do nothing
             0xff00..=0xff7f => match a {
-                0xff11 | 0xff12 | 0xff13 | 0xff14 | 0xff24 | 0xff25 | 0xff26 => {
-                    log::info!("FIXME: mmu: write to sound register {a:x?}");
+                0xff00 => {
+                    self.io.joyp = val;
+                    Ok(())
+                }
+                0xff01 => {
+                    // TODO: serial, logging for now for blargg
+                    print!("{}", val as char);
+                    Ok(())
+                }
+                0xff02 => {
+                    self.io.sc = val;
+                    Ok(())
+                }
+                0xff0f => {
+                    log::info!("mmu: IF write: 0x{val:x?}");
+                    self.io.interrupt = val;
                     Ok(())
                 }
                 0xff40 => {
@@ -128,13 +154,18 @@ impl Mmu {
                     self.io.lcdc = val;
                     Ok(())
                 }
+                0xff41 => {
+                    log::info!("mmu: STAT write: 0x{val:x?}");
+                    self.io.stat = val;
+                    Ok(())
+                }
                 0xff42 => {
                     log::info!("mmu: SCY write: 0x{val:x?}");
                     self.io.scy = val;
                     Ok(())
                 }
-                0xff42 => {
-                    log::info!("mmu: SCY write: 0x{val:x?}");
+                0xff43 => {
+                    log::info!("mmu: SCX write: 0x{val:x?}");
                     self.io.scx = val;
                     Ok(())
                 }
@@ -148,14 +179,23 @@ impl Mmu {
                     self.io.bgp = val;
                     Ok(())
                 }
+                0xff48 => {
+                    self.io.obp0 = val;
+                    Ok(())
+                }
+                0xff49 => {
+                    self.io.obp1 = val;
+                    Ok(())
+                }
                 0xff50 => {
                     self.io.bank = val;
                     Ok(())
                 }
 
-                _ => Err(anyhow!(
-                    "mmu: write: unimplemented IO reg write at 0x{a:x?}"
-                )),
+                _ => {
+                    log::warn!("FIXME mmu: write: unimplemented IO reg write at 0x{a:x?}");
+                    Ok(())
+                }
             },
             0xff80..=0xfffe => {
                 self.hram[a - 0xff80] = val;
@@ -165,7 +205,7 @@ impl Mmu {
                 self.interrupt = val;
                 Ok(())
             }
-            a => Err(anyhow!("mmu: write: read out of bounds at {a:x?}")),
+            a => Err(anyhow!("mmu: write: write out of bounds at {a:x?}")),
         }
     }
 }
