@@ -2,6 +2,8 @@ use std::ops::DerefMut;
 
 use anyhow::anyhow;
 
+use crate::core::Buttons;
+
 // const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
 
@@ -37,6 +39,7 @@ pub struct Mmu {
     hram: Vec<u8>,
     pub io: IoRegisters,
     pub dma_requsted: bool,
+    pub buttons: Buttons,
 }
 
 impl Mmu {
@@ -63,6 +66,7 @@ impl Mmu {
             oam: vec![0; 0x100],
             hram: vec![0; 0x7f],
             dma_requsted: false,
+            buttons: Default::default(),
         }
     }
 
@@ -87,7 +91,44 @@ impl Mmu {
             // 0xfea0..=0xfeff => Err(anyhow!("prohibited read at {a:x?}")),
             0xfea0..=0xfeff => Ok(0xff), // invalid read, just return 0xff
             0xff00..=0xff7f => match a {
-                0xff00 => Ok(self.io.joyp | 0b00001111),
+                0xff00 => {
+                    let joyp = self.io.joyp & 0b00110000;
+                    match joyp >> 4 {
+                        0b10 => {
+                            let mut r = 0;
+                            if !self.buttons.down {
+                                r |= 0b1000;
+                            }
+                            if !self.buttons.up {
+                                r |= 0b0100;
+                            }
+                            if !self.buttons.left {
+                                r |= 0b0010;
+                            }
+                            if !self.buttons.right {
+                                r |= 0b0001;
+                            }
+                            Ok(joyp | r)
+                        }
+                        0b01 => {
+                            let mut r = 0;
+                            if !self.buttons.start {
+                                r |= 0b1000;
+                            }
+                            if !self.buttons.select {
+                                r |= 0b0100;
+                            }
+                            if !self.buttons.b {
+                                r |= 0b0010;
+                            }
+                            if !self.buttons.a {
+                                r |= 0b0001;
+                            }
+                            Ok(joyp | r)
+                        }
+                        _ => Ok(joyp | 0b00001111),
+                    }
+                }
                 0xff02 => Ok(self.io.sc),
                 0xff05 => Ok(self.io.tima),
                 0xff07 => Ok(self.io.tac),
@@ -114,11 +155,11 @@ impl Mmu {
         let a = addr as usize;
         match a {
             0x0..=0x3fff => {
-                self.rom[a] = val;
+                // self.rom[a] = val;
                 Ok(())
             }
             0x4000..=0x7fff => {
-                self.rom_banks[self.cur_bank][a - 0x4000] = val;
+                // self.rom_banks[self.cur_bank][a - 0x4000] = val;
                 Ok(())
             }
             0x8000..=0x9fff => {

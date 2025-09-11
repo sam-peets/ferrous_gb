@@ -1,6 +1,8 @@
 use anyhow::anyhow;
+use egui::Button;
 
 use crate::core::{
+    Buttons,
     mmu::Mmu,
     ppu::Ppu,
     register::{CpuRegisters, Register},

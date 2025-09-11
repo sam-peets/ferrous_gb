@@ -1,8 +1,8 @@
 use std::{fmt::format, time::Instant};
 
-use egui::{Color32, TextureHandle, Vec2, Widget};
+use egui::{Color32, Key, TextureHandle, Vec2, Widget};
 
-use crate::core::cpu::Cpu;
+use crate::core::{Buttons, cpu::Cpu};
 
 pub struct Screen {
     pub cpu: Cpu,
@@ -46,6 +46,19 @@ impl Screen {
     }
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         ui.ctx().request_repaint();
+        let buttons = ui.input(|i| Buttons {
+            up: i.key_down(Key::ArrowUp),
+            down: i.key_down(Key::ArrowDown),
+            left: i.key_down(Key::ArrowLeft),
+            right: i.key_down(Key::ArrowRight),
+            start: i.key_down(Key::Enter),
+            select: i.key_down(Key::Space),
+            a: i.key_down(Key::A),
+            b: i.key_down(Key::B),
+        });
+        self.cpu.mmu.buttons = buttons;
+        // TODO: Joypad interrupt
+
         let frame = match self.frame() {
             Ok(x) => x,
             Err(e) => {

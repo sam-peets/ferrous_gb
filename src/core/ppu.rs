@@ -16,7 +16,7 @@ enum Mode {
 struct Object {
     y: u8,
     x: u8,
-    idx: u8,
+    tile: u8,
     attributes: u8,
 }
 
@@ -123,12 +123,27 @@ impl Ppu {
 
     fn draw_objects(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
         // todo!()
+        let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
+        let vram_base = 0x8000_u16;
         let lx = self.lx + 8;
         let ly = mmu.io.ly + 16;
         for obj in &self.objects {
-            // blah blah blah
+            if !((obj.x <= lx) && ((obj.x + 8) > lx)) {
+                // object isn't on the column
+                continue;
+            }
+            // object is on the current dot
             let dx = lx - obj.x;
             let dy = ly - obj.y;
+            // TODO: this is mostly the same logic as draw_bg, extract this to a function
+            let tile_base = vram_base + (obj.tile as u16) * 16;
+            let tile_row = tile_base + 2 * dy as u16;
+            let b1 = mmu.read(tile_row)?;
+            let b1 = bit(b1, 7 - dx);
+            let b2 = mmu.read(tile_row + 1)?;
+            let b2 = bit(b2, 7 - dx);
+            let color = (b2 << 1) | b1;
+            self.screen[screen_idx] = color;
         }
         Ok(())
     }
@@ -183,7 +198,7 @@ impl Ppu {
                         let obj = Object {
                             y,
                             x: mmu.read(OAM_BASE + i * 4 + 1)?,
-                            idx: mmu.read(OAM_BASE + i * 4 + 2)?,
+                            tile: mmu.read(OAM_BASE + i * 4 + 2)?,
                             attributes: mmu.read(OAM_BASE + i * 4 + 3)?,
                         };
                         self.objects.push(obj);
@@ -193,6 +208,9 @@ impl Ppu {
                 if self.dot == 79 {
                     self.mode = Mode::Drawing;
                     self.penalty = 12 + (mmu.io.scx % 8) as usize;
+                    if mmu.io.ly == 0 {
+                        // self.screen = vec![0; 160 * 144];
+                    }
                 }
             }
             Mode::Drawing => {
