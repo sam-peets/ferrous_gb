@@ -88,6 +88,7 @@ impl Ppu {
                     mmu.io.ly += 1;
                     if mmu.io.ly == 144 {
                         self.mode = Mode::VBlank;
+                        mmu.io.interrupt |= 0b00000001; // request vblank interrupt
                     } else {
                         self.mode = Mode::OamScan;
                     }

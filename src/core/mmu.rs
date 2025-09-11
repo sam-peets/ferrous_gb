@@ -20,7 +20,7 @@ pub struct IoRegisters {
 
 #[derive(Debug)]
 pub struct Mmu {
-    interrupt: u8,
+    pub ie: u8,
     rom: Vec<u8>,
     rom_banks: Vec<Vec<u8>>,
     cur_bank: usize,
@@ -34,7 +34,7 @@ pub struct Mmu {
 
 impl Mmu {
     pub fn new(rom: Vec<u8>) -> Self {
-        let low_rom = rom[0..0x3fff].to_vec();
+        let low_rom = rom[0..0x4000].to_vec();
         let mut rom_banks = Vec::new();
         for i in 1..rom.len() / 0x3fff {
             rom_banks.push(rom[(i * 0x4000)..((i + 1) * 0x4000)].to_vec());
@@ -46,7 +46,7 @@ impl Mmu {
 
         Self {
             io,
-            interrupt: 0,
+            ie: 0,
             rom: low_rom,
             rom_banks,
             cur_bank: 0,
@@ -93,7 +93,7 @@ impl Mmu {
                 _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
             },
             0xff80..=0xfffe => Ok(self.hram[a - 0xff80]),
-            0xffff => Ok(self.interrupt),
+            0xffff => Ok(self.ie),
             a => Err(anyhow!("read out of bounds at {a:x?}")),
         }
     }
@@ -207,7 +207,7 @@ impl Mmu {
                 Ok(())
             }
             0xffff => {
-                self.interrupt = val;
+                self.ie = val;
                 Ok(())
             }
             a => Err(anyhow!("mmu: write: write out of bounds at {a:x?}")),

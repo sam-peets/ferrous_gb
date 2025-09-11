@@ -115,6 +115,17 @@ impl From<u8> for FlagRegister {
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Register8(pub u8);
 
+impl AddAssign<u8> for Register8 {
+    fn add_assign(&mut self, rhs: u8) {
+        self.0 = self.0.overflowing_add(rhs).0;
+    }
+}
+impl SubAssign<u8> for Register8 {
+    fn sub_assign(&mut self, rhs: u8) {
+        self.0 = self.0.overflowing_sub(rhs).0;
+    }
+}
+
 impl From<Register8> for u8 {
     fn from(value: Register8) -> Self {
         value.0

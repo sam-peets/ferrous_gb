@@ -15,6 +15,7 @@ pub struct Cpu {
     pub ppu: Ppu,
     ime: bool,
     pub logging: bool,
+    pub halted: bool,
 }
 
 impl Cpu {
@@ -27,6 +28,7 @@ impl Cpu {
             ppu: Ppu::new(),
             ime: false,
             logging: false,
+            halted: false,
         }
     }
 
@@ -56,6 +58,34 @@ impl Cpu {
         }
 
         log::trace!("cycle: cpu state: {:?}", self.registers);
+
+        if self.ime && (self.mmu.ie & self.mmu.io.interrupt) > 0 {
+            // interrupts are enabled and at least one has been requested
+            if (self.mmu.ie & self.mmu.io.interrupt & 0b00000001) > 0 {
+                // vblank
+                self.mmu.io.interrupt &= !(0b00000001);
+                self.ime = false;
+                self.mmu
+                    .write(self.registers.sp.read() - 1, self.registers.pc.high.read())?;
+                self.mmu
+                    .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
+                self.registers.sp -= 2;
+                self.registers.pc.write(0x40);
+            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00000010) > 0 {
+                // lcd
+            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00000100) > 0 {
+                // timer
+            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00001000) > 0 {
+                // serial
+            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00010000) > 0 {
+                // joypad
+            }
+        }
+
+        if self.halted {
+            return Ok(());
+        }
+
         let opcode = self.mmu.read(self.registers.pc.read())?;
         log::trace!(
             "cycle: opcode 0x{opcode:x?}, pc: 0x{:x?}",
@@ -165,6 +195,13 @@ impl Cpu {
             0x98..=0x9d | 0x9f => self.sbc_a_r8(opcode)?,
             0x07 => self.rlca()?,
             0x0f => self.rrca()?,
+            0xf2 => self.ld_a_ptr_ff00_c()?,
+            0x8e => self.adc_a_ptr_hl()?,
+            0x96 => self.sub_a_ptr_hl()?,
+            0x9e => self.sbc_a_ptr_hl()?,
+            0xa6 => self.and_a_ptr_hl()?,
+            0x27 => self.daa()?,
+            0x76 => self.halt()?,
             0xcb => {
                 let opcode = self.mmu.read(self.registers.pc.read() + 1)?;
                 match opcode {
@@ -219,6 +256,20 @@ impl Cpu {
                     | 0xb0..=0xb5
                     | 0xb7..=0xbd
                     | 0xbf => self.res_b_r8(opcode),
+                    0x06 => self.rlc_ptr_hl(),
+                    0x0e => self.rrc_ptr_hl(),
+                    0x16 => self.rl_ptr_hl(),
+                    0x1e => self.rr_ptr_hl(),
+                    0x26 => self.sla_ptr_hl(),
+                    0x2e => self.sra_ptr_hl(),
+                    0x36 => self.swap_ptr_hl(),
+                    0x3e => self.srl_ptr_hl(),
+                    0x46 | 0x4e | 0x56 | 0x5e | 0x66 | 0x6e | 0x76 | 0x7e => {
+                        self.bit_b_ptr_hl(opcode)
+                    }
+                    0x86 | 0x8e | 0x96 | 0x9e | 0xa6 | 0xae | 0xb6 | 0xbe => {
+                        self.res_b_ptr_hl(opcode)
+                    }
 
                     _ => Err(anyhow!("cycle: unknown CB opcode: {opcode:x?}")),
                 }
@@ -1000,6 +1051,7 @@ impl Cpu {
     fn inc_ptr_hl(&mut self) -> anyhow::Result<()> {
         let target = self.mmu.read(self.registers.hl.read())?;
         let (val, _) = target.overflowing_add(1);
+        self.mmu.write(self.registers.hl.read(), val)?;
 
         self.registers.af.low.z = val == 0;
         self.registers.af.low.h = {
@@ -1445,6 +1497,293 @@ impl Cpu {
         target.write(val);
         self.registers.pc += 2;
         self.delay += 2;
+        Ok(())
+    }
+
+    fn ld_a_ptr_ff00_c(&mut self) -> anyhow::Result<()> {
+        let c = self.registers.bc.low.read() as u16;
+        let addr = 0xff00 + c;
+        let val = self.mmu.read(addr)?;
+        self.registers.af.high.write(val);
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+    fn adc_a_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.hl.read())?;
+        let a = self.registers.af.high.read();
+        let c = if self.registers.af.low.c { 1 } else { 0 };
+
+        let (val, carry) = {
+            let (val, c1) = a.overflowing_add(arg);
+            let (val, c2) = val.overflowing_add(c);
+            (val, c1 || c2)
+        };
+
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = carry;
+        self.registers.af.low.h = {
+            let (a, _) = (a & 0xf).overflowing_add(arg & 0xf);
+            let (a, _) = a.overflowing_add(c);
+            a >= 0x10
+        };
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn sub_a_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.hl.read())?;
+        let a = self.registers.af.high.read();
+        let (val, c) = a.overflowing_sub(arg);
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = true;
+        self.registers.af.low.h = {
+            let (x, _) = (a & 0x0f).overflowing_sub(arg & 0x0f);
+            (x & 0x10) > 0
+        };
+        self.registers.af.low.c = c;
+
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+    fn sbc_a_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.hl.read())?;
+        let a = self.registers.af.high.read();
+        let c = if self.registers.af.low.c { 1 } else { 0 };
+
+        let (val, carry) = {
+            let (val, c1) = a.overflowing_sub(arg);
+            let (val, c2) = val.overflowing_sub(c);
+            (val, c1 || c2)
+        };
+
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = carry;
+        self.registers.af.low.h = {
+            let (a, _) = (a & 0xf).overflowing_sub(arg & 0xf);
+            let (a, _) = a.overflowing_sub(c);
+            a >= 0x10
+        };
+        self.registers.af.low.n = true;
+
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+    fn and_a_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.hl.read())?;
+        let a = self.registers.af.high.read();
+        let val = a & arg;
+        self.registers.af.high.write(val);
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = true;
+        self.registers.af.low.c = false;
+        self.registers.pc += 1;
+        self.delay += 2;
+
+        Ok(())
+    }
+    pub fn rlc_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let val = self.mmu.read(self.registers.hl.read())?;
+        let c = (val & 0b10000000) > 0;
+        let val = if c { (val << 1) | 1 } else { val << 1 };
+        self.mmu.write(self.registers.hl.read(), val)?;
+
+        self.registers.af.low.c = c;
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+        self.registers.pc += 2;
+        self.delay += 4;
+        Ok(())
+    }
+    fn rrc_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let val = self.mmu.read(self.registers.hl.read())?;
+        let c = (val & 0b00000001) > 0;
+
+        let val = if c { (val >> 1) | 0b10000000 } else { val >> 1 };
+        self.mmu.write(self.registers.hl.read(), val)?;
+        self.registers.af.low.c = c;
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+        self.registers.pc += 2;
+        self.delay += 4;
+        Ok(())
+    }
+
+    fn rl_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let val = self.mmu.read(self.registers.hl.read())?;
+
+        let b7 = (val & 0b10000000) > 0;
+        let val = {
+            let val = val << 1;
+            if self.registers.af.low.c {
+                val | 0b00000001
+            } else {
+                val
+            }
+        };
+        self.mmu.write(self.registers.hl.read(), val)?;
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = false;
+        self.registers.af.low.c = b7;
+
+        self.registers.pc += 2;
+        self.delay += 4;
+        Ok(())
+    }
+    fn rr_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let target = self.mmu.read(self.registers.hl.read())?;
+        let b0 = target & 0b1;
+        let val = if self.registers.af.low.c {
+            (target >> 1) | 0b10000000
+        } else {
+            target >> 1
+        };
+        self.mmu.write(self.registers.hl.read(), val)?;
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = b0 > 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 2;
+        self.delay += 4;
+
+        Ok(())
+    }
+    fn sla_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let val = self.mmu.read(self.registers.hl.read())?;
+        let c = (val & 0b10000000) > 0;
+        let val = val << 1;
+        self.mmu.write(self.registers.hl.read(), val)?;
+        self.registers.af.low.c = c;
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+        self.registers.pc += 2;
+        self.delay += 4;
+        Ok(())
+    }
+
+    fn sra_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let val = self.mmu.read(self.registers.hl.read())?;
+        let c = (val & 0b00000001) > 0;
+        let b7 = (val & 0b10000000) > 0;
+        let val = if b7 {
+            (val >> 1) | 0b10000000
+        } else {
+            val >> 1
+        };
+        self.mmu.write(self.registers.hl.read(), val)?;
+        self.registers.af.low.c = c;
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+        self.registers.pc += 2;
+        self.delay += 4;
+        Ok(())
+    }
+    fn swap_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let r = self.mmu.read(self.registers.hl.read())?;
+        let high = (r & 0xf0) >> 4;
+        let low = r & 0x0f;
+        let val = (low << 4) | high;
+
+        self.mmu.write(self.registers.hl.read(), val)?;
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = false;
+        self.registers.af.low.c = false;
+
+        self.registers.pc += 2;
+        self.delay += 4;
+        Ok(())
+    }
+
+    fn srl_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let r = self.mmu.read(self.registers.hl.read())?;
+        let b0 = r & 0b1;
+        let val = r >> 1;
+        self.mmu.write(self.registers.hl.read(), val)?;
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = b0 > 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 2;
+        self.delay += 4;
+
+        Ok(())
+    }
+
+    fn bit_b_ptr_hl(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let bit = (opcode & 0b00111000) >> 3;
+        let target = self.mmu.read(self.registers.hl.read())?;
+        self.registers.af.low.z = (target & (1 << bit)) == 0;
+        self.registers.af.low.h = true;
+        self.registers.af.low.n = false;
+        self.delay += 3;
+        self.registers.pc += 2;
+        Ok(())
+    }
+
+    fn res_b_ptr_hl(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let bit = (opcode & 0b00111000) >> 3;
+        let target = self.mmu.read(self.registers.hl.read())?;
+        let val = target & !(1 << bit);
+        self.mmu.write(self.registers.hl.read(), val)?;
+        self.registers.pc += 2;
+        self.delay += 3;
+        Ok(())
+    }
+
+    fn daa(&mut self) -> anyhow::Result<()> {
+        // adapted from https://gbdev.gg8.se/wiki/articles/DAA
+        if self.registers.af.low.n {
+            if self.registers.af.low.c {
+                self.registers.af.high -= 0x60;
+            }
+            if self.registers.af.low.h {
+                self.registers.af.high -= 0x06;
+            }
+        } else {
+            if self.registers.af.low.c || self.registers.af.high.read() > 0x99 {
+                self.registers.af.high += 0x60;
+                self.registers.af.low.c = true;
+            }
+            if self.registers.af.low.h || (self.registers.af.high.read() & 0x0f) > 0x09 {
+                self.registers.af.high += 0x06;
+            }
+        }
+        self.registers.af.low.z = self.registers.af.high.read() == 0;
+        self.registers.af.low.h = false;
+
+        self.registers.pc += 1;
+        self.delay += 1;
+
+        Ok(())
+    }
+
+    fn halt(&mut self) -> anyhow::Result<()> {
+        self.halted = true;
+        self.registers.pc += 1;
+        self.delay += 1;
         Ok(())
     }
 }
