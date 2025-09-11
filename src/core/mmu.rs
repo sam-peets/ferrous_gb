@@ -1,3 +1,5 @@
+use std::ops::DerefMut;
+
 use anyhow::anyhow;
 
 // const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
@@ -5,14 +7,17 @@ const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
 
 #[derive(Default, Debug)]
 pub struct IoRegisters {
-    pub joyp: u8,      // ff00
-    pub sc: u8,        // ff02
+    pub joyp: u8,      // 0xff00
+    pub sc: u8,        // 0xff02
+    pub tima: u8,      // 0xff05
+    pub tac: u8,       // 0xff07
     pub interrupt: u8, // 0xff0f
     pub lcdc: u8,      // 0xff40
     pub stat: u8,      // 0xff41
     pub scy: u8,       // 0xff42
     pub scx: u8,       // 0xff43
     pub ly: u8,        // 0xff44
+    pub dma: u8,       // 0xff46
     pub bgp: u8,       // 0xff47
     pub obp0: u8,      // 0xff48
     pub obp1: u8,      // 0xff49
@@ -31,6 +36,7 @@ pub struct Mmu {
     oam: Vec<u8>,
     hram: Vec<u8>,
     pub io: IoRegisters,
+    pub dma_requsted: bool,
 }
 
 impl Mmu {
@@ -56,6 +62,7 @@ impl Mmu {
             wram: vec![0; 0x2000],
             oam: vec![0; 0x100],
             hram: vec![0; 0x7f],
+            dma_requsted: false,
         }
     }
 
@@ -82,6 +89,8 @@ impl Mmu {
             0xff00..=0xff7f => match a {
                 0xff00 => Ok(self.io.joyp | 0b00001111),
                 0xff02 => Ok(self.io.sc),
+                0xff05 => Ok(self.io.tima),
+                0xff07 => Ok(self.io.tac),
                 0xff0f => Ok(self.io.interrupt),
                 0xff40 => Ok(self.io.lcdc),
                 0xff41 => Ok(self.io.stat),
@@ -89,6 +98,7 @@ impl Mmu {
                 0xff43 => Ok(self.io.scx),
                 0xff44 => Ok(self.io.ly),
                 // 0xff44 => Ok(0x90),
+                0xff46 => Ok(self.io.dma),
                 0xff48 => Ok(self.io.obp0),
                 0xff49 => Ok(self.io.obp1),
                 _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
@@ -146,28 +156,36 @@ impl Mmu {
                     self.io.sc = val;
                     Ok(())
                 }
+                0xff05 => {
+                    self.io.tima = val;
+                    Ok(())
+                }
+                0xff07 => {
+                    self.io.tac = val;
+                    Ok(())
+                }
                 0xff0f => {
-                    log::info!("mmu: IF write: 0x{val:x?}");
+                    log::debug!("mmu: IF write: 0x{val:x?}");
                     self.io.interrupt = val;
                     Ok(())
                 }
                 0xff40 => {
-                    log::info!("mmu: LCDC write: 0x{val:x?}");
+                    log::debug!("mmu: LCDC write: 0x{val:x?}");
                     self.io.lcdc = val;
                     Ok(())
                 }
                 0xff41 => {
-                    log::info!("mmu: STAT write: 0x{val:x?}");
+                    log::debug!("mmu: STAT write: 0x{val:x?}");
                     self.io.stat = val;
                     Ok(())
                 }
                 0xff42 => {
-                    log::info!("mmu: SCY write: 0x{val:x?}");
+                    log::debug!("mmu: SCY write: 0x{val:x?}");
                     self.io.scy = val;
                     Ok(())
                 }
                 0xff43 => {
-                    log::info!("mmu: SCX write: 0x{val:x?}");
+                    log::debug!("mmu: SCX write: 0x{val:x?}");
                     self.io.scx = val;
                     Ok(())
                 }
@@ -176,8 +194,13 @@ impl Mmu {
                     // self.io.ly = val;
                     Ok(())
                 }
+                0xff46 => {
+                    self.io.dma = val;
+                    self.dma_requsted = true;
+                    Ok(())
+                }
                 0xff47 => {
-                    log::info!("mmu: BGP write: 0x{val:x?}");
+                    log::debug!("mmu: BGP write: 0x{val:x?}");
                     self.io.bgp = val;
                     Ok(())
                 }

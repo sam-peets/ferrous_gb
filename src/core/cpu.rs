@@ -16,6 +16,7 @@ pub struct Cpu {
     ime: bool,
     pub logging: bool,
     pub halted: bool,
+    pub dma_idx: u8,
 }
 
 impl Cpu {
@@ -29,6 +30,7 @@ impl Cpu {
             ime: false,
             logging: false,
             halted: false,
+            dma_idx: 0,
         }
     }
 
@@ -44,7 +46,56 @@ impl Cpu {
         cpu
     }
 
-    pub fn cycle(&mut self) -> anyhow::Result<()> {
+    pub fn call_interrupt(&mut self, addr: u16, b: u8) -> anyhow::Result<()> {
+        self.mmu.io.interrupt &= !(1 << b);
+        self.ime = false;
+        self.mmu
+            .write(self.registers.sp.read() - 1, self.registers.pc.high.read())?;
+        self.mmu
+            .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
+        self.registers.sp -= 2;
+        self.registers.pc.write(addr);
+        self.halted = false;
+        Ok(())
+    }
+
+    pub fn cycle(&mut self, clock: i32) -> anyhow::Result<()> {
+        if (self.mmu.io.tac & 0b00000100) > 0 {
+            // timer is enabled, tick it
+            let interval = match self.mmu.io.tac & 0b00000011 {
+                0b00 => 256,
+                0b01 => 4,
+                0b10 => 16,
+                0b11 => 64,
+                _ => unreachable!(),
+            };
+            if clock % interval == 0 {
+                let (val, overflow) = self.mmu.io.tima.overflowing_add(1);
+                self.mmu.io.tima = val;
+                if overflow {
+                    self.mmu.io.interrupt |= 0b00000100;
+                }
+            }
+        }
+
+        if self.mmu.dma_requsted {
+            self.dma_idx = 161; // TODO: verify
+            self.mmu.dma_requsted = false;
+            log::debug!("cycle: DMA: starting transfer")
+        }
+
+        if self.dma_idx > 160 {
+            // apparently there's 2 delay cycles
+            self.dma_idx -= 1;
+        } else if self.dma_idx > 0 {
+            let offset = 160 - self.dma_idx as u16;
+            let (src, _) = ((self.mmu.io.dma as u16) << 8).overflowing_add(offset);
+            let (dest, _) = 0xfe00u16.overflowing_add(offset); // 0xfe00 is the base address for OAM
+            self.mmu.write(dest, self.mmu.read(src)?)?;
+            self.dma_idx -= 1;
+            log::trace!("cycle: DMA: copied from 0x{src:04x?} to 0x{dest:04x?}");
+        }
+
         self.cycles += 1;
         match self.delay {
             0 => {}
@@ -63,26 +114,27 @@ impl Cpu {
             // interrupts are enabled and at least one has been requested
             if (self.mmu.ie & self.mmu.io.interrupt & 0b00000001) > 0 {
                 // vblank
-                self.mmu.io.interrupt &= !(0b00000001);
-                self.ime = false;
-                self.mmu
-                    .write(self.registers.sp.read() - 1, self.registers.pc.high.read())?;
-                self.mmu
-                    .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
-                self.registers.sp -= 2;
-                self.registers.pc.write(0x40);
+                self.call_interrupt(0x40, 0)?;
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00000010) > 0 {
                 // lcd
+                self.call_interrupt(0x48, 1)?;
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00000100) > 0 {
                 // timer
+                log::info!("cycle: servicing timer interrupt");
+                self.call_interrupt(0x50, 2)?;
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00001000) > 0 {
                 // serial
+                self.call_interrupt(0x58, 3)?;
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00010000) > 0 {
                 // joypad
+                self.call_interrupt(0x60, 4)?;
             }
         }
 
         if self.halted {
+            if (self.mmu.ie & self.mmu.io.interrupt) > 0 {
+                self.halted = false;
+            }
             return Ok(());
         }
 
@@ -108,6 +160,10 @@ impl Cpu {
                 self.mmu.read(self.registers.pc.read() + 1)?,
                 self.mmu.read(self.registers.pc.read() + 2)?,
                 self.mmu.read(self.registers.pc.read() + 3)?,
+            );
+            println!(
+                "IME: {} IE: {:x?} IF: {:x?}",
+                self.ime, self.mmu.ie, self.mmu.io.interrupt
             );
         }
 
@@ -1781,6 +1837,7 @@ impl Cpu {
     }
 
     fn halt(&mut self) -> anyhow::Result<()> {
+        log::info!("halt!");
         self.halted = true;
         self.registers.pc += 1;
         self.delay += 1;

@@ -18,7 +18,7 @@ impl Screen {
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
-            self.cpu.cycle()?;
+            self.cpu.cycle(i)?;
         }
         let f = self
             .cpu
