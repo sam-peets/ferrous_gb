@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 
-const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
+// const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
+const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
 
 #[derive(Default, Debug)]
 pub struct IoRegisters {
