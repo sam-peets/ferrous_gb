@@ -87,6 +87,7 @@ impl Mmu {
                 0xff42 => Ok(self.io.scy),
                 0xff43 => Ok(self.io.scx),
                 0xff44 => Ok(self.io.ly),
+                // 0xff44 => Ok(0x90),
                 0xff48 => Ok(self.io.obp0),
                 0xff49 => Ok(self.io.obp1),
                 _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
@@ -191,9 +192,13 @@ impl Mmu {
                     self.io.bank = val;
                     Ok(())
                 }
+                0xff10..=0xff3f => {
+                    log::trace!("FIXME: mmu: sound register write: {a:x?} {val:x?}");
+                    Ok(())
+                }
 
                 _ => {
-                    log::warn!("FIXME mmu: write: unimplemented IO reg write at 0x{a:x?}");
+                    log::warn!("FIXME: mmu: write: unimplemented IO reg write at 0x{a:x?}");
                     Ok(())
                 }
             },

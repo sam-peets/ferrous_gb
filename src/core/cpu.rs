@@ -1,5 +1,3 @@
-use std::ptr::fn_addr_eq;
-
 use anyhow::anyhow;
 
 use crate::core::{
@@ -15,7 +13,7 @@ pub struct Cpu {
     delay: usize,
     pub cycles: usize,
     pub ppu: Ppu,
-    ei: bool,
+    ime: bool,
 }
 
 impl Cpu {
@@ -26,13 +24,13 @@ impl Cpu {
             delay: 0,
             cycles: 0,
             ppu: Ppu::new(),
-            ei: false,
+            ime: false,
         }
     }
 
     pub fn new_fastboot(rom: Vec<u8>) -> Self {
         let mut cpu = Cpu::new(rom);
-        cpu.registers.af.write(0x0180);
+        cpu.registers.af.write(0x01b0);
         cpu.registers.bc.write(0x0013);
         cpu.registers.de.write(0x00d8);
         cpu.registers.hl.write(0x014d);
@@ -80,7 +78,7 @@ impl Cpu {
         // );
         match opcode {
             0x01 | 0x11 | 0x21 | 0x31 => self.ld_r16_u16(opcode)?,
-            0xa8..=0xad | 0xaf => self.xor_a_r(opcode)?,
+            0xa8..=0xad | 0xaf => self.xor_a_r8(opcode)?,
             0x22 => self.ld_ptr_hli_a()?,
             0x32 => self.ld_ptr_hld_a()?,
             0x20 | 0x30 | 0x28 | 0x38 => self.jr_cond_i8(opcode)?,
@@ -129,6 +127,29 @@ impl Cpu {
             0xb0..=0xb5 | 0xb7 => self.or_a_r8(opcode)?,
             0x2f => self.cpl()?,
             0xe6 => self.and_a_u8()?,
+            0xfa => self.ld_a_ptr_u16()?,
+            0xc4 | 0xd4 | 0xcc | 0xdc => self.call_cond_u16(opcode)?,
+            0xc6 => self.add_a_u8()?,
+            0xd6 => self.sub_a_u8()?,
+            0x46 | 0x56 | 0x66 | 0x4e | 0x5e | 0x6e | 0x7e => self.ld_r8_ptr_hl(opcode)?,
+            0xae => self.xor_a_ptr_hl()?,
+            0x1f => self.rra()?,
+            0xee => self.xor_a_u8()?,
+            0xce => self.adc_a_u8()?,
+            0xc0 | 0xd0 | 0xc8 | 0xd8 => self.ret_cond(opcode)?,
+            0xb6 => self.or_a_ptr_hl()?,
+            0x35 => self.dec_ptr_hl()?,
+            0x34 => self.inc_ptr_hl()?,
+            0x09 | 0x19 | 0x29 | 0x39 => self.add_hl_rr(opcode)?,
+            0xe9 => self.jp_hl()?,
+            0xa0..=0xa5 | 0xa7 => self.and_a_r8(opcode)?,
+            0xc7 | 0xd7 | 0xe7 | 0xf7 | 0xcf | 0xdf | 0xef | 0xff => self.rst(opcode)?,
+            0x80..=0x85 | 0x87 => self.add_a_r8(opcode)?,
+            0xf6 => self.or_a_u8()?,
+            0x08 => self.ld_ptr_u16_sp()?,
+            0xf9 => self.ld_sp_hl()?,
+            0xc2 | 0xd2 | 0xca | 0xda => self.jp_cond_u16(opcode)?,
+            0xd9 => self.reti()?,
             0xcb => {
                 let opcode = self.mmu.read(self.registers.pc.read() + 1)?;
                 match opcode {
@@ -145,6 +166,29 @@ impl Cpu {
                     | 0x77..=0x7d
                     | 0x7f => self.bit_b_r8(opcode),
                     0x10..=0x15 | 0x17 => self.rl_r8(opcode),
+                    0x18..=0x1d | 0x1f => self.rr_r8(opcode),
+                    0x30..=0x35 | 0x37 => self.swap_r8(opcode),
+                    0x38..=0x3d | 0x3f => self.srl_r8(opcode),
+                    0xc0..=0xc5
+                    | 0xc7
+                    | 0xd0..=0xd5
+                    | 0xd7
+                    | 0xe0..=0xe5
+                    | 0xe7
+                    | 0xf0..=0xf5
+                    | 0xf7
+                    | 0xc8..=0xcd
+                    | 0xcf
+                    | 0xd8..=0xdd
+                    | 0xdf
+                    | 0xe8..=0xed
+                    | 0xef
+                    | 0xf8..=0xfd
+                    | 0xff => self.set_b_r8(opcode),
+                    0xc6 | 0xd6 | 0xe6 | 0xf6 | 0xce | 0xde | 0xee | 0xfe => {
+                        self.set_b_ptr_hl(opcode)
+                    }
+
                     _ => Err(anyhow!("cycle: unknown CB opcode: {opcode:x?}")),
                 }
             }?,
@@ -167,15 +211,14 @@ impl Cpu {
         Ok(())
     }
 
-    fn xor_a_r(&mut self, opcode: u8) -> anyhow::Result<()> {
+    fn xor_a_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
         let reg = opcode & 0b00000111;
-        let arg = self.registers.af.high;
-        let target = self.registers.get_r8(reg);
-        target.write(arg.into());
+        let a = self.registers.af.high.read();
+        let target = self.registers.get_r8(reg).read();
+        let val = a ^ target;
+        self.registers.af.high.write(val);
 
-        if target.read() == 0 {
-            self.registers.af.low.z = true;
-        }
+        self.registers.af.low.z = val == 0;
         self.registers.af.low.c = false;
         self.registers.af.low.h = false;
         self.registers.af.low.n = false;
@@ -600,7 +643,7 @@ impl Cpu {
     }
 
     fn di(&mut self) -> anyhow::Result<()> {
-        self.ei = false;
+        self.ime = false;
         self.registers.pc += 1;
         self.delay += 1;
         Ok(())
@@ -643,7 +686,7 @@ impl Cpu {
         Ok(())
     }
     fn ei(&mut self) -> anyhow::Result<()> {
-        self.ei = true;
+        self.ime = true;
         self.registers.pc += 1;
         self.delay += 1;
         Ok(())
@@ -672,7 +715,453 @@ impl Cpu {
 
         Ok(())
     }
+
+    fn ld_a_ptr_u16(&mut self) -> anyhow::Result<()> {
+        let low = self.mmu.read(self.registers.pc.read() + 1)?;
+        let high = self.mmu.read(self.registers.pc.read() + 2)?;
+        let addr = ((high as u16) << 8) | (low as u16);
+        let val = self.mmu.read(addr)?;
+        self.registers.af.high.write(val);
+        self.registers.pc += 3;
+        self.delay += 4;
+
+        Ok(())
+    }
+
+    fn call_cond_u16(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let code = (opcode & 0b00011000) >> 3;
+        let cond = self.registers.get_cond(code);
+
+        if !cond {
+            self.registers.pc += 3;
+            self.delay += 3;
+            return Ok(());
+        }
+
+        let addr_high = self.mmu.read(self.registers.pc.read() + 2)? as u16;
+        let addr_low = self.mmu.read(self.registers.pc.read() + 1)? as u16;
+        let addr = (addr_high << 8) | addr_low;
+        self.registers.pc += 3;
+        self.mmu
+            .write(self.registers.sp.read() - 1, self.registers.pc.high.read())?;
+        self.mmu
+            .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
+        self.registers.pc.write(addr);
+        self.registers.sp -= 2;
+        log::trace!("call_cond_u16: calling subroutine 0x{addr:x?}");
+        Ok(())
+    }
+
+    fn add_a_u8(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.pc.read() + 1)?;
+        let a = self.registers.af.high.read();
+        let (val, c) = a.overflowing_add(arg);
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = {
+            let (x, _) = (a & 0x0f).overflowing_add(arg & 0x0f);
+            (x & 0x10) > 0
+        };
+        self.registers.af.low.c = c;
+
+        self.registers.pc += 2;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn sub_a_u8(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.pc.read() + 1)?;
+        let a = self.registers.af.high.read();
+        let (val, c) = a.overflowing_sub(arg);
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = true;
+        self.registers.af.low.h = {
+            let (x, _) = (a & 0x0f).overflowing_sub(arg & 0x0f);
+            (x & 0x10) > 0
+        };
+        self.registers.af.low.c = c;
+
+        self.registers.pc += 2;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn ld_r8_ptr_hl(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = (opcode & 0b00111000) >> 3;
+        let val = self.mmu.read(self.registers.hl.read())?;
+        let target = self.registers.get_r8(reg);
+        target.write(val);
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn xor_a_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let a = self.registers.af.high.read();
+        let target = self.mmu.read(self.registers.hl.read())?;
+        let val = a ^ target;
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = false;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn srl_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = opcode & 0b00000111;
+        let target = self.registers.get_r8(reg);
+        let b0 = target.read() & 0b1;
+        let val = target.read() >> 1;
+        target.write(val);
+
+        self.registers.af.low.z = target.read() == 0;
+        self.registers.af.low.c = b0 > 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 2;
+        self.delay += 2;
+
+        Ok(())
+    }
+
+    fn rr_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = opcode & 0b00000111;
+        let target = self.registers.get_r8(reg).read();
+        let b0 = target & 0b1;
+        let val = if self.registers.af.low.c {
+            (target >> 1) | 0b10000000
+        } else {
+            target >> 1
+        };
+        self.registers.get_r8(reg).write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = b0 > 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 2;
+        self.delay += 2;
+
+        Ok(())
+    }
+
+    fn rra(&mut self) -> anyhow::Result<()> {
+        let target = self.registers.af.high.read();
+        let b0 = target & 0b1;
+        let val = if self.registers.af.low.c {
+            (target >> 1) | 0b10000000
+        } else {
+            target >> 1
+        };
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = false;
+        self.registers.af.low.c = b0 > 0;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 1;
+        self.delay += 1;
+
+        Ok(())
+    }
+    fn xor_a_u8(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.pc.read() + 1)?;
+        let a = self.registers.af.high.read();
+        let val = a ^ arg;
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = false;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 2;
+        self.delay += 2;
+        Ok(())
+    }
+    fn adc_a_u8(&mut self) -> anyhow::Result<()> {
+        let arg = self.mmu.read(self.registers.pc.read() + 1)?;
+        let a = self.registers.af.high.read();
+
+        let mut carry = false;
+        let val = if self.registers.af.low.c {
+            let (val, c) = a.overflowing_add(arg);
+            if c {
+                carry = true;
+            }
+            let (val, c) = val.overflowing_add(1);
+            if c {
+                carry = true;
+            }
+            val
+        } else {
+            let (val, c) = a.overflowing_add(arg);
+            if c {
+                carry = true;
+            }
+            val
+        };
+
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = carry;
+        self.registers.af.low.h = {
+            let c = if carry { 1 } else { 0 };
+            ((a & 0xf) + (arg & 0xf) + c) >= 0x10
+        };
+        self.registers.af.low.n = false;
+
+        self.registers.pc += 2;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn ret_cond(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let code = (opcode & 0b00011000) >> 3;
+        let cond = self.registers.get_cond(code);
+        if !cond {
+            self.registers.pc += 1;
+            self.delay += 2;
+            return Ok(());
+        }
+
+        let low = self.mmu.read(self.registers.sp.read())?;
+        let high = self.mmu.read(self.registers.sp.read() + 1)?;
+        self.registers.pc.high.write(high);
+        self.registers.pc.low.write(low);
+        self.registers.sp += 2;
+        self.delay += 5;
+        Ok(())
+    }
+
+    fn or_a_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let target = self.mmu.read(self.registers.hl.read())?;
+        let a = self.registers.af.high.read();
+        let val = target | a;
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = false;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+        self.registers.af.high.write(val);
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn dec_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let target = self.mmu.read(self.registers.hl.read())?;
+        let (val, _) = target.overflowing_sub(1);
+        self.mmu.write(self.registers.hl.read(), val)?;
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.h = {
+            let (v, _) = (target & 0x0f).overflowing_sub(1);
+            v >= 0x10
+        };
+        self.registers.af.low.n = true;
+        self.registers.pc += 1;
+        self.delay += 3;
+
+        Ok(())
+    }
+    fn inc_ptr_hl(&mut self) -> anyhow::Result<()> {
+        let target = self.mmu.read(self.registers.hl.read())?;
+        let (val, _) = target.overflowing_add(1);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.h = {
+            let (v, _) = (target & 0x0f).overflowing_add(1);
+            v >= 0x10
+        };
+        self.registers.af.low.n = false;
+        self.registers.pc += 1;
+        self.delay += 3;
+
+        Ok(())
+    }
+    fn add_hl_rr(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = (opcode & 0b00110000) >> 4;
+        let target = self.registers.get_r16_ss(reg).read();
+        let hl = self.registers.hl.read();
+        let (val, carry) = hl.overflowing_add(target);
+
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = {
+            let (v, _) = (hl & 0x0fff).overflowing_add(target & 0x0fff);
+            v > 0x1000
+        };
+        self.registers.af.low.c = carry;
+
+        self.registers.hl.write(val);
+
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn jp_hl(&mut self) -> anyhow::Result<()> {
+        self.registers.pc.write(self.registers.hl.read());
+        self.delay += 1;
+        Ok(())
+    }
+
     fn swap_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
-        todo!()
+        let reg = opcode & 0b00000111;
+        let target = self.registers.get_r8(reg);
+        let r = target.read();
+        let high = (r & 0xf0) >> 4;
+        let low = r & 0x0f;
+        let val = (low << 4) | high;
+
+        target.write(val);
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = false;
+        self.registers.af.low.c = false;
+
+        self.registers.pc += 2;
+        self.delay += 2;
+        Ok(())
+    }
+    fn and_a_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = opcode & 0b00000111;
+        let target = self.registers.get_r8(reg).read();
+        let a = self.registers.af.high.read();
+        let val = a & target;
+
+        self.registers.af.high.write(val);
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = true;
+        self.registers.af.low.c = false;
+        self.registers.pc += 1;
+        self.delay += 1;
+
+        Ok(())
+    }
+
+    fn rst(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let n = (opcode & 0b00111000) >> 3;
+        let a = (n * 8) as u16;
+        self.mmu
+            .write(self.registers.sp.read() - 1, self.registers.pc.high.read())?;
+        self.mmu
+            .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
+        self.registers.sp -= 2;
+        self.registers.pc.write(a);
+
+        self.delay += 4;
+
+        Ok(())
+    }
+
+    fn add_a_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = opcode & 0b00000111;
+        let arg = self.registers.get_r8(reg).read();
+        let a = self.registers.af.high.read();
+        let (val, c) = a.overflowing_add(arg);
+        self.registers.af.high.write(val);
+
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.n = false;
+        self.registers.af.low.h = {
+            let (x, _) = (a & 0x0f).overflowing_add(arg & 0x0f);
+            (x & 0x10) > 0
+        };
+        self.registers.af.low.c = c;
+
+        self.registers.pc += 1;
+        self.delay += 1;
+        Ok(())
+    }
+
+    fn or_a_u8(&mut self) -> anyhow::Result<()> {
+        let target = self.mmu.read(self.registers.pc.read() + 1)?;
+        let a = self.registers.af.high.read();
+        let val = target | a;
+        self.registers.af.low.z = val == 0;
+        self.registers.af.low.c = false;
+        self.registers.af.low.h = false;
+        self.registers.af.low.n = false;
+        self.registers.af.high.write(val);
+        self.registers.pc += 2;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn set_b_r8(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let reg = opcode & 0b00000111;
+        let bit = (opcode & 0b00111000) >> 3;
+        let target = self.registers.get_r8(reg);
+        let val = target.read() | (1 << bit);
+        target.write(val);
+        self.registers.pc += 2;
+        self.delay += 2;
+        Ok(())
+    }
+
+    fn set_b_ptr_hl(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let bit = (opcode & 0b00111000) >> 3;
+        let target = self.mmu.read(self.registers.hl.read())?;
+        let val = target | (1 << bit);
+        self.mmu.write(self.registers.hl.read(), val)?;
+        self.registers.pc += 2;
+        self.delay += 4;
+        Ok(())
+    }
+    fn ld_ptr_u16_sp(&mut self) -> anyhow::Result<()> {
+        let low = self.mmu.read(self.registers.pc.read() + 1)?;
+        let high = self.mmu.read(self.registers.pc.read() + 2)?;
+        let addr = ((high as u16) << 8) | (low as u16);
+        self.mmu.write(addr, self.registers.sp.low.read())?;
+        self.mmu.write(addr + 1, self.registers.sp.high.read())?;
+        self.registers.pc += 3;
+        self.delay += 5;
+        Ok(())
+    }
+    fn ld_sp_hl(&mut self) -> anyhow::Result<()> {
+        self.registers.sp.write(self.registers.hl.read());
+        self.registers.pc += 1;
+        self.delay += 2;
+        Ok(())
+    }
+    fn jp_cond_u16(&mut self, opcode: u8) -> anyhow::Result<()> {
+        let low = self.mmu.read(self.registers.pc.read() + 1)?;
+        let high = self.mmu.read(self.registers.pc.read() + 2)?;
+        let addr = ((high as u16) << 8) | (low as u16);
+        let code = (opcode & 0b00011000) >> 3;
+        let cond = self.registers.get_cond(code);
+        if cond {
+            self.registers.pc.write(addr);
+            self.delay += 4;
+        } else {
+            self.registers.pc += 3;
+            self.delay += 3;
+        }
+
+        Ok(())
+    }
+    fn reti(&mut self) -> anyhow::Result<()> {
+        let low = self.mmu.read(self.registers.sp.read())?;
+        let high = self.mmu.read(self.registers.sp.read() + 1)?;
+        self.registers.pc.high.write(high);
+        self.registers.pc.low.write(low);
+        self.registers.sp += 2;
+        self.delay += 4;
+        self.ime = true;
+        Ok(())
     }
 }

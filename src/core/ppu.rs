@@ -34,7 +34,11 @@ impl Ppu {
     }
     // pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
     //     let mut f = vec![0; 160 * 144];
-    //     let base: u16 = 0x8000;
+    //     let base = if (mmu.io.lcdc & 0b00010000) > 0 {
+    //         0x8000
+    //     } else {
+    //         0x8800
+    //     } as u16;
     //     for x in 0..16 {
     //         for y in 0..8 {
     //             for line in 0..8 {
@@ -53,6 +57,7 @@ impl Ppu {
 
     //     Ok(f)
     // }
+
     pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
         Ok(self
             .screen
@@ -116,8 +121,8 @@ impl Ppu {
 
                 let tile = mmu.read(bg_tilemap_base + (tile_y * 32 + tile_x))?;
                 let tile_base = vram_base + (tile as u16) * 16;
-                let tile_row = tile_base + 2 * ((mmu.io.ly + mmu.io.scy) % 8) as u16;
-                let tile_col_d = (self.lx + mmu.io.scx) % 8;
+                let tile_row = tile_base + 2 * (dy % 8) as u16;
+                let tile_col_d = dx % 8;
 
                 let b1 = mmu.read(tile_row)?;
                 let b1 = bit(b1, 7 - tile_col_d);
