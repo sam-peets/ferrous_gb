@@ -138,7 +138,7 @@ impl Mmu {
                 }
                 0xff01 => {
                     // TODO: serial, logging for now for blargg
-                    print!("{}", val as char);
+                    // print!("{}", val as char);
                     Ok(())
                 }
                 0xff02 => {

@@ -1,0 +1,12 @@
+Blargg Test Results:
+- FAIL 01 - unimplemented opcode
+- FAIL 02 - EI
+- PASS 03
+- PASS 04
+- PASS 05
+- PASS 06
+- PASS 07
+- FAIL 08 - unimplemented opcode
+- PASS 09
+- PASS 10
+- FAIL 11 - unimplemented opcode

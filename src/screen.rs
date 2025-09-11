@@ -54,5 +54,6 @@ impl Screen {
         );
         let sized = egui::load::SizedTexture::from_handle(&self.texture);
         ui.add(egui::Image::new(sized));
+        ui.checkbox(&mut self.cpu.logging, "logging enabled");
     }
 }

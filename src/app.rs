@@ -1,7 +1,10 @@
 use egui::{Color32, TextureHandle, Widget};
 use poll_promise::Promise;
 
-use crate::{core::cpu::Cpu, screen::Screen};
+use crate::{
+    core::cpu::Cpu,
+    screen::{self, Screen},
+};
 
 pub struct TemplateApp {
     promise: Option<Promise<Option<Vec<u8>>>>,
