@@ -1,3 +1,5 @@
+use std::{fmt::format, time::Instant};
+
 use egui::{Color32, TextureHandle, Vec2, Widget};
 
 use crate::core::cpu::Cpu;
@@ -5,13 +7,19 @@ use crate::core::cpu::Cpu;
 pub struct Screen {
     pub cpu: Cpu,
     pub texture: TextureHandle,
+    pub last_frame: u128,
 }
 
 impl Screen {
     pub fn new(cpu: Cpu, texture: egui::TextureHandle) -> Self {
-        Screen { cpu, texture }
+        Screen {
+            cpu,
+            texture,
+            last_frame: 0,
+        }
     }
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
+        let start = Instant::now();
         for i in 0..(70224 / 4) {
             // is this right?
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
@@ -33,6 +41,7 @@ impl Screen {
                 _ => unreachable!(),
             })
             .collect();
+        self.last_frame = start.elapsed().as_millis();
         Ok(f)
     }
     pub fn ui(&mut self, ui: &mut egui::Ui) {
@@ -55,5 +64,6 @@ impl Screen {
         let sized = egui::load::SizedTexture::from_handle(&self.texture);
         ui.add(egui::Image::new(sized));
         ui.checkbox(&mut self.cpu.logging, "logging enabled");
+        ui.label(format!("frame time: {}ms", self.last_frame));
     }
 }

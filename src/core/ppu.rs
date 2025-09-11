@@ -2,6 +2,7 @@ use crate::core::mmu::Mmu;
 
 const WIDTH: usize = 160;
 const HEIGHT: usize = 144;
+const OAM_BASE: u16 = 0xfe00;
 
 #[derive(Debug)]
 enum Mode {
@@ -12,12 +13,21 @@ enum Mode {
 }
 
 #[derive(Debug)]
+struct Object {
+    y: u8,
+    x: u8,
+    idx: u8,
+    attributes: u8,
+}
+
+#[derive(Debug)]
 pub struct Ppu {
     screen: Vec<u8>,
     dot: usize,
     mode: Mode,
     penalty: usize,
     lx: u8,
+    objects: Vec<Object>, // list of objects found during OAM scan
 }
 pub fn bit(x: u8, i: u8) -> u8 {
     (x & (1 << i)) >> i
@@ -30,6 +40,7 @@ impl Ppu {
             penalty: 0,
             screen: vec![0; 160 * 144],
             lx: 0,
+            objects: Vec::new(),
         }
     }
     // pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
@@ -59,18 +70,69 @@ impl Ppu {
     // }
 
     pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
-        Ok(self
-            .screen
-            .iter()
-            .map(|x| match x {
-                0b00 => mmu.io.bgp & 0b00000011,
-                0b01 => (mmu.io.bgp & 0b00001100) >> 2,
-                0b10 => (mmu.io.bgp & 0b00110000) >> 4,
-                0b11 => (mmu.io.bgp & 0b11000000) >> 6,
-                _ => unreachable!("ppu: frame: invalid color {x:02x?}"),
-            })
-            .collect())
+        if (mmu.io.lcdc & 0b10000000) != 0 {
+            // lcd is enabled
+            Ok(self
+                .screen
+                .iter()
+                .map(|x| match x {
+                    0b00 => mmu.io.bgp & 0b00000011,
+                    0b01 => (mmu.io.bgp & 0b00001100) >> 2,
+                    0b10 => (mmu.io.bgp & 0b00110000) >> 4,
+                    0b11 => (mmu.io.bgp & 0b11000000) >> 6,
+                    _ => unreachable!("ppu: frame: invalid color {x:02x?}"),
+                })
+                .collect())
+        } else {
+            Ok(vec![0; 160 * 144])
+        }
     }
+
+    fn draw_bg(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
+        let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
+        let vram_base = if (mmu.io.lcdc & 0b00010000) > 0 {
+            0x8000
+        } else {
+            0x8800
+        } as u16;
+        let bg_tilemap_base = if (mmu.io.lcdc & 0b00001000) > 0 {
+            0x9c00
+        } else {
+            0x9800
+        } as u16;
+
+        let (dx, _) = mmu.io.scx.overflowing_add(self.lx);
+        let (dy, _) = mmu.io.scy.overflowing_add(mmu.io.ly);
+        let tile_x = (dx / 8) as u16;
+        let tile_y = (dy / 8) as u16;
+
+        let tile = mmu.read(bg_tilemap_base + (tile_y * 32 + tile_x))?;
+        let tile_base = vram_base + (tile as u16) * 16;
+        let tile_row = tile_base + 2 * (dy % 8) as u16;
+        let tile_col_d = dx % 8;
+
+        let b1 = mmu.read(tile_row)?;
+        let b1 = bit(b1, 7 - tile_col_d);
+        let b2 = mmu.read(tile_row + 1)?;
+        let b2 = bit(b2, 7 - tile_col_d);
+        let color = (b2 << 1) | b1;
+        self.screen[screen_idx] = color;
+
+        Ok(())
+    }
+
+    fn draw_objects(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
+        // todo!()
+        let lx = self.lx + 8;
+        let ly = mmu.io.ly + 16;
+        for obj in &self.objects {
+            // blah blah blah
+            let dx = lx - obj.x;
+            let dy = ly - obj.y;
+        }
+        Ok(())
+    }
+
     pub fn clock(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
         // println!(
         // "clock: dot: {} lx: {} ly: {} mode: {:?}",
@@ -95,48 +157,62 @@ impl Ppu {
                 }
             }
             Mode::OamScan => {
-                // TODO
+                // TODO: cheating by reading all at once, what's the precise timing here?
+                if self.dot == 0 {
+                    self.objects.clear();
+                    for i in 0..40 {
+                        if self.objects.len() == 10 {
+                            break;
+                        }
+                        let y = mmu.read(OAM_BASE + i * 4)?;
+                        let ly = mmu.io.ly + 16; // object y pos is offset by 16
+
+                        let height = if (mmu.io.lcdc & 0b00000100) != 0 {
+                            // 8x16 sprites
+                            16
+                        } else {
+                            // 8x8 sprites
+                            8
+                        };
+                        if !((y <= ly) && ((y + height) > ly)) {
+                            // object isn't on the line
+                            continue;
+                        }
+
+                        // object is on the line, we should draw it
+                        let obj = Object {
+                            y,
+                            x: mmu.read(OAM_BASE + i * 4 + 1)?,
+                            idx: mmu.read(OAM_BASE + i * 4 + 2)?,
+                            attributes: mmu.read(OAM_BASE + i * 4 + 3)?,
+                        };
+                        self.objects.push(obj);
+                    }
+                }
+
                 if self.dot == 79 {
                     self.mode = Mode::Drawing;
                     self.penalty = 12 + (mmu.io.scx % 8) as usize;
                 }
             }
             Mode::Drawing => {
-                // BG
-                let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
-                let vram_base = if (mmu.io.lcdc & 0b00010000) > 0 {
-                    0x8000
+                if (mmu.io.lcdc & 0b00000001) > 0 {
+                    // BG enabled
+                    self.draw_bg(mmu)?;
                 } else {
-                    0x8800
-                } as u16;
-                let bg_tilemap_base = if (mmu.io.lcdc & 0b00001000) > 0 {
-                    0x9c00
-                } else {
-                    0x9800
-                } as u16;
+                    // BG disabled, set to white
+                    self.screen = vec![0; 160 * 144];
+                }
 
-                let (dx, _) = mmu.io.scx.overflowing_add(self.lx);
-                let (dy, _) = mmu.io.scy.overflowing_add(mmu.io.ly);
-                let tile_x = (dx / 8) as u16;
-                let tile_y = (dy / 8) as u16;
-
-                let tile = mmu.read(bg_tilemap_base + (tile_y * 32 + tile_x))?;
-                let tile_base = vram_base + (tile as u16) * 16;
-                let tile_row = tile_base + 2 * (dy % 8) as u16;
-                let tile_col_d = dx % 8;
-
-                let b1 = mmu.read(tile_row)?;
-                let b1 = bit(b1, 7 - tile_col_d);
-                let b2 = mmu.read(tile_row + 1)?;
-                let b2 = bit(b2, 7 - tile_col_d);
-                let color = (b2 << 1) | b1;
-                self.screen[screen_idx] = color;
+                if (mmu.io.lcdc & 0b00000010) > 0 {
+                    self.draw_objects(mmu)?;
+                }
 
                 self.lx += 1;
                 if self.lx == 160 {
                     self.lx = 0;
                     self.mode = Mode::HBlank;
-                }
+                };
             }
             Mode::VBlank => {
                 if self.dot == 455 && mmu.io.ly == 153 {

@@ -32,6 +32,7 @@ impl eframe::App for TemplateApp {
                         egui::ColorImage::filled([160, 144], Color32::BLACK),
                         egui::TextureOptions::NEAREST,
                     ),
+                    last_frame: 0,
                 });
                 self.promise = None;
             }
