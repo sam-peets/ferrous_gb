@@ -1,5 +1,3 @@
-use std::{fmt::format, time::Instant};
-
 use egui::{Color32, Key, TextureHandle, Vec2, Widget};
 
 use crate::core::{Buttons, cpu::Cpu};
@@ -19,7 +17,6 @@ impl Screen {
         }
     }
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
-        let start = Instant::now();
         for i in 0..(70224 / 4) {
             // is this right?
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
@@ -41,7 +38,6 @@ impl Screen {
                 _ => unreachable!(),
             })
             .collect();
-        self.last_frame = start.elapsed().as_millis();
         Ok(f)
     }
     pub fn ui(&mut self, ui: &mut egui::Ui) {

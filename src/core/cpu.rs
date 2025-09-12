@@ -79,6 +79,10 @@ impl Cpu {
                 }
             }
         }
+        if clock % 64 == 0 {
+            let (val, _) = self.mmu.io.div.overflowing_add(1);
+            self.mmu.io.div = val;
+        }
 
         if self.mmu.dma_requsted {
             self.dma_idx = 161; // TODO: verify

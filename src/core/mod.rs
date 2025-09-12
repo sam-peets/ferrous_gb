@@ -14,3 +14,11 @@ pub struct Buttons {
     pub a: bool,
     pub b: bool,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum Mode {
+    HBlank = 0,
+    OamScan = 1,
+    Drawing = 2,
+    VBlank = 3,
+}

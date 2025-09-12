@@ -1,16 +1,8 @@
-use crate::core::mmu::Mmu;
+use crate::core::{Mode, mmu::Mmu};
 
 const WIDTH: usize = 160;
 const HEIGHT: usize = 144;
 const OAM_BASE: u16 = 0xfe00;
-
-#[derive(Debug)]
-enum Mode {
-    HBlank = 0,
-    OamScan = 1,
-    Drawing = 2,
-    VBlank = 3,
-}
 
 #[derive(Debug)]
 struct Object {
@@ -24,10 +16,13 @@ struct Object {
 pub struct Ppu {
     screen: Vec<u8>,
     dot: usize,
-    mode: Mode,
     penalty: usize,
     lx: u8,
     objects: Vec<Object>, // list of objects found during OAM scan
+    window_y: u8,
+    window_y_update: bool,
+    wy_condition: bool,
+    wx_condition: bool,
 }
 pub fn bit(x: u8, i: u8) -> u8 {
     (x & (1 << i)) >> i
@@ -36,11 +31,14 @@ impl Ppu {
     pub fn new() -> Self {
         Self {
             dot: 0,
-            mode: Mode::OamScan,
             penalty: 0,
             screen: vec![0; 160 * 144],
             lx: 0,
             objects: Vec::new(),
+            window_y: 0,
+            window_y_update: false,
+            wy_condition: false,
+            wx_condition: false,
         }
     }
     // pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
@@ -90,11 +88,6 @@ impl Ppu {
 
     fn draw_bg(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
         let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
-        let vram_base = if (mmu.io.lcdc & 0b00010000) > 0 {
-            0x8000
-        } else {
-            0x8800
-        } as u16;
         let bg_tilemap_base = if (mmu.io.lcdc & 0b00001000) > 0 {
             0x9c00
         } else {
@@ -107,7 +100,53 @@ impl Ppu {
         let tile_y = (dy / 8) as u16;
 
         let tile = mmu.read(bg_tilemap_base + (tile_y * 32 + tile_x))?;
-        let tile_base = vram_base + (tile as u16) * 16;
+
+        let tile_base = {
+            if (mmu.io.lcdc & 0b00010000) > 0 {
+                0x8000 + (tile as u16) * 16
+            } else if tile <= 127 {
+                0x9000 + (tile as u16) * 16
+            } else {
+                0x8800 + ((tile - 128) as u16) * 16
+            }
+        };
+        let tile_row = tile_base + 2 * (dy % 8) as u16;
+        let tile_col_d = dx % 8;
+
+        let b1 = mmu.read(tile_row)?;
+        let b1 = bit(b1, 7 - tile_col_d);
+        let b2 = mmu.read(tile_row + 1)?;
+        let b2 = bit(b2, 7 - tile_col_d);
+        let color = (b2 << 1) | b1;
+        self.screen[screen_idx] = color;
+
+        Ok(())
+    }
+
+    fn draw_window(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
+        let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
+        let window_tilemap_base = if (mmu.io.lcdc & 0b01000000) > 0 {
+            0x9c00
+        } else {
+            0x9800
+        } as u16;
+
+        let (dx, _) = self.lx.overflowing_sub(mmu.io.wx.overflowing_sub(7).0);
+        let (dy, _) = self.window_y.overflowing_sub(mmu.io.wy);
+        let tile_x = (dx / 8) as u16;
+        let tile_y = (dy / 8) as u16;
+
+        let tile = mmu.read(window_tilemap_base + (tile_y * 32 + tile_x))?;
+
+        let tile_base = {
+            if (mmu.io.lcdc & 0b00010000) > 0 {
+                0x8000 + (tile as u16) * 16
+            } else if tile <= 127 {
+                0x9000 + (tile as u16) * 16
+            } else {
+                0x8800 + ((tile - 128) as u16) * 16
+            }
+        };
         let tile_row = tile_base + 2 * (dy % 8) as u16;
         let tile_col_d = dx % 8;
 
@@ -133,8 +172,16 @@ impl Ppu {
                 continue;
             }
             // object is on the current dot
-            let dx = lx - obj.x;
-            let dy = ly - obj.y;
+            let dx = if (obj.attributes & 0b00100000) > 0 {
+                7 - (lx - obj.x)
+            } else {
+                lx - obj.x
+            };
+            let dy = if (obj.attributes & 0b01000000) > 0 {
+                7 - (ly - obj.y)
+            } else {
+                ly - obj.y
+            };
             // TODO: this is mostly the same logic as draw_bg, extract this to a function
             let tile_base = vram_base + (obj.tile as u16) * 16;
             let tile_row = tile_base + 2 * dy as u16;
@@ -159,15 +206,17 @@ impl Ppu {
             return Ok(());
         }
 
-        match self.mode {
+        match mmu.ppu_mode {
             Mode::HBlank => {
                 if self.dot == 455 {
                     mmu.io.ly += 1;
                     if mmu.io.ly == 144 {
-                        self.mode = Mode::VBlank;
+                        mmu.ppu_mode = Mode::VBlank;
                         mmu.io.interrupt |= 0b00000001; // request vblank interrupt
+                        self.window_y = 0;
                     } else {
-                        self.mode = Mode::OamScan;
+                        mmu.ppu_mode = Mode::OamScan;
+                        self.wx_condition = false;
                     }
                 }
             }
@@ -206,17 +255,30 @@ impl Ppu {
                 }
 
                 if self.dot == 79 {
-                    self.mode = Mode::Drawing;
+                    mmu.ppu_mode = Mode::Drawing;
                     self.penalty = 12 + (mmu.io.scx % 8) as usize;
+                    if mmu.io.ly == mmu.io.wy {
+                        self.wy_condition = true;
+                    }
                     if mmu.io.ly == 0 {
                         // self.screen = vec![0; 160 * 144];
                     }
                 }
             }
             Mode::Drawing => {
+                if self.lx + 7 == mmu.io.wx {
+                    self.wx_condition = true;
+                }
+
                 if (mmu.io.lcdc & 0b00000001) > 0 {
                     // BG enabled
                     self.draw_bg(mmu)?;
+
+                    // window is only drawn if BG is enabled
+                    if (mmu.io.lcdc & 0b00100000) > 0 && self.wy_condition && self.wx_condition {
+                        self.window_y_update = true;
+                        self.draw_window(mmu)?;
+                    }
                 } else {
                     // BG disabled, set to white
                     self.screen = vec![0; 160 * 144];
@@ -229,13 +291,20 @@ impl Ppu {
                 self.lx += 1;
                 if self.lx == 160 {
                     self.lx = 0;
-                    self.mode = Mode::HBlank;
+                    mmu.ppu_mode = Mode::HBlank;
+                    if self.window_y_update {
+                        self.window_y += 1;
+                        self.window_y_update = false;
+                    }
                 };
             }
             Mode::VBlank => {
                 if self.dot == 455 && mmu.io.ly == 153 {
-                    self.mode = Mode::OamScan;
+                    // end of frame
+                    mmu.ppu_mode = Mode::OamScan;
                     mmu.io.ly = 0;
+                    self.wy_condition = false;
+                    self.window_y = 0;
                 } else if self.dot == 455 {
                     mmu.io.ly += 1;
                 }

@@ -2,7 +2,7 @@ use std::ops::DerefMut;
 
 use anyhow::anyhow;
 
-use crate::core::Buttons;
+use crate::core::{Buttons, Mode};
 
 // const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
@@ -11,6 +11,7 @@ const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
 pub struct IoRegisters {
     pub joyp: u8,      // 0xff00
     pub sc: u8,        // 0xff02
+    pub div: u8,       // 0xff04
     pub tima: u8,      // 0xff05
     pub tac: u8,       // 0xff07
     pub interrupt: u8, // 0xff0f
@@ -19,10 +20,13 @@ pub struct IoRegisters {
     pub scy: u8,       // 0xff42
     pub scx: u8,       // 0xff43
     pub ly: u8,        // 0xff44
+    pub lyc: u8,       // 0xff45
     pub dma: u8,       // 0xff46
     pub bgp: u8,       // 0xff47
     pub obp0: u8,      // 0xff48
     pub obp1: u8,      // 0xff49
+    pub wy: u8,        //0xff4a
+    pub wx: u8,        //0xff4b
     pub bank: u8,      // 0xff50 - bootrom mapping control
 }
 
@@ -40,6 +44,7 @@ pub struct Mmu {
     pub io: IoRegisters,
     pub dma_requsted: bool,
     pub buttons: Buttons,
+    pub ppu_mode: Mode,
 }
 
 impl Mmu {
@@ -67,6 +72,7 @@ impl Mmu {
             hram: vec![0; 0x7f],
             dma_requsted: false,
             buttons: Default::default(),
+            ppu_mode: Mode::OamScan,
         }
     }
 
@@ -130,18 +136,29 @@ impl Mmu {
                     }
                 }
                 0xff02 => Ok(self.io.sc),
+                0xff04 => Ok(self.io.div),
                 0xff05 => Ok(self.io.tima),
                 0xff07 => Ok(self.io.tac),
                 0xff0f => Ok(self.io.interrupt),
                 0xff40 => Ok(self.io.lcdc),
-                0xff41 => Ok(self.io.stat),
+                0xff41 => {
+                    let mut v = self.io.stat;
+                    if self.io.ly == self.io.lyc {
+                        v |= 0b00000100;
+                    }
+                    v |= self.ppu_mode as u8;
+                    Ok(v)
+                }
                 0xff42 => Ok(self.io.scy),
                 0xff43 => Ok(self.io.scx),
                 0xff44 => Ok(self.io.ly),
                 // 0xff44 => Ok(0x90),
+                0xff45 => Ok(self.io.lyc),
                 0xff46 => Ok(self.io.dma),
                 0xff48 => Ok(self.io.obp0),
                 0xff49 => Ok(self.io.obp1),
+                0xff4a => Ok(self.io.wy),
+                0xff4b => Ok(self.io.wx),
                 _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
             },
             0xff80..=0xfffe => Ok(self.hram[a - 0xff80]),
@@ -185,7 +202,7 @@ impl Mmu {
             0xfea0..=0xfeff => Ok(()), // invalid write, do nothing
             0xff00..=0xff7f => match a {
                 0xff00 => {
-                    self.io.joyp = val;
+                    self.io.joyp = val & 0b00110000;
                     Ok(())
                 }
                 0xff01 => {
@@ -195,6 +212,11 @@ impl Mmu {
                 }
                 0xff02 => {
                     self.io.sc = val;
+                    Ok(())
+                }
+                0xff04 => {
+                    // any write resets the divider to 0
+                    self.io.div = 0;
                     Ok(())
                 }
                 0xff05 => {
@@ -217,7 +239,7 @@ impl Mmu {
                 }
                 0xff41 => {
                     log::debug!("mmu: STAT write: 0x{val:x?}");
-                    self.io.stat = val;
+                    self.io.stat = val & 0b0111100;
                     Ok(())
                 }
                 0xff42 => {
@@ -233,6 +255,10 @@ impl Mmu {
                 0xff44 => {
                     // read-only
                     // self.io.ly = val;
+                    Ok(())
+                }
+                0xff45 => {
+                    self.io.lyc = val;
                     Ok(())
                 }
                 0xff46 => {
@@ -251,6 +277,14 @@ impl Mmu {
                 }
                 0xff49 => {
                     self.io.obp1 = val;
+                    Ok(())
+                }
+                0xff4a => {
+                    self.io.wy = val;
+                    Ok(())
+                }
+                0xff4b => {
+                    self.io.wx = val;
                     Ok(())
                 }
                 0xff50 => {
