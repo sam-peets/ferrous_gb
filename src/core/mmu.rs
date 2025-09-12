@@ -159,6 +159,10 @@ impl Mmu {
                 0xff49 => Ok(self.io.obp1),
                 0xff4a => Ok(self.io.wy),
                 0xff4b => Ok(self.io.wx),
+                0xff10..=0xff3f => {
+                    log::trace!("FIXME: mmu: sound register read: {a:x?}");
+                    Ok(0xff)
+                }
                 _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
             },
             0xff80..=0xfffe => Ok(self.hram[a - 0xff80]),
@@ -239,7 +243,7 @@ impl Mmu {
                 }
                 0xff41 => {
                     log::debug!("mmu: STAT write: 0x{val:x?}");
-                    self.io.stat = val & 0b0111100;
+                    self.io.stat = val & 0b01111000;
                     Ok(())
                 }
                 0xff42 => {
@@ -306,6 +310,7 @@ impl Mmu {
                 Ok(())
             }
             0xffff => {
+                log::debug!("write: IE write: 0x{val:02x?}");
                 self.ie = val;
                 Ok(())
             }

@@ -118,21 +118,26 @@ impl Cpu {
 
         if self.ime && (self.mmu.ie & self.mmu.io.interrupt) > 0 {
             // interrupts are enabled and at least one has been requested
+            log::debug!("interrupts are enabled and one has been requested");
             if (self.mmu.ie & self.mmu.io.interrupt & 0b00000001) > 0 {
                 // vblank
+                log::debug!("cycle: servicing vblank interrupt");
                 self.call_interrupt(0x40, 0)?;
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00000010) > 0 {
                 // lcd
+                log::debug!("cycle: servicing lcd interrupt");
                 self.call_interrupt(0x48, 1)?;
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00000100) > 0 {
                 // timer
-                log::info!("cycle: servicing timer interrupt");
+                log::debug!("cycle: servicing timer interrupt");
                 self.call_interrupt(0x50, 2)?;
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00001000) > 0 {
                 // serial
+                log::debug!("cycle: servicing serial interrupt");
                 self.call_interrupt(0x58, 3)?;
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00010000) > 0 {
                 // joypad
+                log::debug!("cycle: servicing joypad interrupt");
                 self.call_interrupt(0x60, 4)?;
             }
         }
@@ -787,6 +792,7 @@ impl Cpu {
     }
 
     fn di(&mut self) -> anyhow::Result<()> {
+        log::debug!("DI");
         self.ime = false;
         self.registers.pc += 1;
         self.delay += 1;
@@ -830,6 +836,7 @@ impl Cpu {
         Ok(())
     }
     fn ei(&mut self) -> anyhow::Result<()> {
+        log::debug!("EI");
         self.ime = true;
         self.registers.pc += 1;
         self.delay += 1;

@@ -71,7 +71,7 @@ impl Screen {
             egui::TextureOptions::NEAREST,
         );
         let sized = egui::load::SizedTexture::from_handle(&self.texture);
-        ui.add(egui::Image::new(sized));
+        ui.add(egui::Image::new(sized).fit_to_exact_size(4.0 * Vec2::new(160.0, 144.0)));
         ui.checkbox(&mut self.cpu.logging, "logging enabled");
         ui.label(format!("frame time: {}ms", self.last_frame));
     }

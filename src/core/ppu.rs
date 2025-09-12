@@ -10,6 +10,7 @@ struct Object {
     x: u8,
     tile: u8,
     attributes: u8,
+    height: u8,
 }
 
 #[derive(Debug)]
@@ -70,17 +71,7 @@ impl Ppu {
     pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
         if (mmu.io.lcdc & 0b10000000) != 0 {
             // lcd is enabled
-            Ok(self
-                .screen
-                .iter()
-                .map(|x| match x {
-                    0b00 => mmu.io.bgp & 0b00000011,
-                    0b01 => (mmu.io.bgp & 0b00001100) >> 2,
-                    0b10 => (mmu.io.bgp & 0b00110000) >> 4,
-                    0b11 => (mmu.io.bgp & 0b11000000) >> 6,
-                    _ => unreachable!("ppu: frame: invalid color {x:02x?}"),
-                })
-                .collect())
+            Ok(self.screen.clone())
         } else {
             Ok(vec![0; 160 * 144])
         }
@@ -118,7 +109,13 @@ impl Ppu {
         let b2 = mmu.read(tile_row + 1)?;
         let b2 = bit(b2, 7 - tile_col_d);
         let color = (b2 << 1) | b1;
-        self.screen[screen_idx] = color;
+        self.screen[screen_idx] = match color {
+            0b00 => mmu.io.bgp & 0b00000011,
+            0b01 => (mmu.io.bgp & 0b00001100) >> 2,
+            0b10 => (mmu.io.bgp & 0b00110000) >> 4,
+            0b11 => (mmu.io.bgp & 0b11000000) >> 6,
+            _ => unreachable!("ppu: draw_bg: invalid color {color:02x?}"),
+        };
 
         Ok(())
     }
@@ -132,7 +129,7 @@ impl Ppu {
         } as u16;
 
         let (dx, _) = self.lx.overflowing_sub(mmu.io.wx.overflowing_sub(7).0);
-        let (dy, _) = self.window_y.overflowing_sub(mmu.io.wy);
+        let dy = self.window_y;
         let tile_x = (dx / 8) as u16;
         let tile_y = (dy / 8) as u16;
 
@@ -155,7 +152,13 @@ impl Ppu {
         let b2 = mmu.read(tile_row + 1)?;
         let b2 = bit(b2, 7 - tile_col_d);
         let color = (b2 << 1) | b1;
-        self.screen[screen_idx] = color;
+        self.screen[screen_idx] = match color {
+            0b00 => mmu.io.bgp & 0b00000011,
+            0b01 => (mmu.io.bgp & 0b00001100) >> 2,
+            0b10 => (mmu.io.bgp & 0b00110000) >> 4,
+            0b11 => (mmu.io.bgp & 0b11000000) >> 6,
+            _ => unreachable!("ppu: draw_window: invalid color {color:02x?}"),
+        };
 
         Ok(())
     }
@@ -166,6 +169,12 @@ impl Ppu {
         let vram_base = 0x8000_u16;
         let lx = self.lx + 8;
         let ly = mmu.io.ly + 16;
+        let height = if (mmu.io.lcdc & 0b00000100) > 0 {
+            16_u8
+        } else {
+            8_u8
+        };
+
         for obj in &self.objects {
             if !((obj.x <= lx) && ((obj.x + 8) > lx)) {
                 // object isn't on the column
@@ -173,24 +182,51 @@ impl Ppu {
             }
             // object is on the current dot
             let dx = if (obj.attributes & 0b00100000) > 0 {
-                7 - (lx - obj.x)
+                let (x, _) = 7_u8.overflowing_sub(lx - obj.x);
+                x
             } else {
                 lx - obj.x
             };
             let dy = if (obj.attributes & 0b01000000) > 0 {
-                7 - (ly - obj.y)
+                let (y, _) = (height - 1).overflowing_sub(ly - obj.y);
+                y
             } else {
                 ly - obj.y
             };
+            // ignore the last bit for tall objects
+            let tile = if height == 16 {
+                obj.tile & 0b1111_1110
+            } else {
+                obj.tile
+            };
+
             // TODO: this is mostly the same logic as draw_bg, extract this to a function
-            let tile_base = vram_base + (obj.tile as u16) * 16;
+            let tile_base = vram_base + (tile as u16) * 16;
             let tile_row = tile_base + 2 * dy as u16;
             let b1 = mmu.read(tile_row)?;
             let b1 = bit(b1, 7 - dx);
             let b2 = mmu.read(tile_row + 1)?;
             let b2 = bit(b2, 7 - dx);
             let color = (b2 << 1) | b1;
-            self.screen[screen_idx] = color;
+            // if (obj.attributes & 0b10000000) > 0 && color != 0b00 {
+            //     continue;
+            // }
+            if color == 0b00 {
+                continue;
+            }
+            let palette = if (obj.attributes & 0b00010000) > 0 {
+                mmu.io.obp1
+            } else {
+                mmu.io.obp0
+            };
+
+            self.screen[screen_idx] = match color {
+                0b00 => palette & 0b00000011,
+                0b01 => (palette & 0b00001100) >> 2,
+                0b10 => (palette & 0b00110000) >> 4,
+                0b11 => (palette & 0b11000000) >> 6,
+                _ => unreachable!("ppu: draw_objects: invalid color {color:02x?}"),
+            };
         }
         Ok(())
     }
@@ -209,14 +245,17 @@ impl Ppu {
         match mmu.ppu_mode {
             Mode::HBlank => {
                 if self.dot == 455 {
-                    mmu.io.ly += 1;
-                    if mmu.io.ly == 144 {
+                    if mmu.io.ly == 143 {
                         mmu.ppu_mode = Mode::VBlank;
                         mmu.io.interrupt |= 0b00000001; // request vblank interrupt
                         self.window_y = 0;
                     } else {
                         mmu.ppu_mode = Mode::OamScan;
                         self.wx_condition = false;
+                        if (mmu.io.stat & 0b00010000) > 0 {
+                            // raise STAT interrupt for mode 1
+                            mmu.io.interrupt |= 0b00000010;
+                        }
                     }
                 }
             }
@@ -238,7 +277,7 @@ impl Ppu {
                             // 8x8 sprites
                             8
                         };
-                        if !((y <= ly) && ((y + height) > ly)) {
+                        if !((ly >= y) && ((y + height) > ly)) {
                             // object isn't on the line
                             continue;
                         }
@@ -249,6 +288,7 @@ impl Ppu {
                             x: mmu.read(OAM_BASE + i * 4 + 1)?,
                             tile: mmu.read(OAM_BASE + i * 4 + 2)?,
                             attributes: mmu.read(OAM_BASE + i * 4 + 3)?,
+                            height,
                         };
                         self.objects.push(obj);
                     }
@@ -263,6 +303,10 @@ impl Ppu {
                     if mmu.io.ly == 0 {
                         // self.screen = vec![0; 160 * 144];
                     }
+                    if (mmu.io.stat & 0b00100000) > 0 {
+                        // raise STAT interrupt for mode 2
+                        mmu.io.interrupt |= 0b00000010;
+                    }
                 }
             }
             Mode::Drawing => {
@@ -270,21 +314,22 @@ impl Ppu {
                     self.wx_condition = true;
                 }
 
-                if (mmu.io.lcdc & 0b00000001) > 0 {
+                if (mmu.io.lcdc & 0b0000_0001) > 0 {
                     // BG enabled
                     self.draw_bg(mmu)?;
 
                     // window is only drawn if BG is enabled
-                    if (mmu.io.lcdc & 0b00100000) > 0 && self.wy_condition && self.wx_condition {
+                    if (mmu.io.lcdc & 0b0010_0000) > 0 && self.wy_condition && self.wx_condition {
                         self.window_y_update = true;
                         self.draw_window(mmu)?;
                     }
                 } else {
                     // BG disabled, set to white
-                    self.screen = vec![0; 160 * 144];
+                    let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
+                    self.screen[screen_idx] = mmu.io.bgp & 0b00000011;
                 }
 
-                if (mmu.io.lcdc & 0b00000010) > 0 {
+                if (mmu.io.lcdc & 0b0000_0010) > 0 {
                     self.draw_objects(mmu)?;
                 }
 
@@ -296,25 +341,43 @@ impl Ppu {
                         self.window_y += 1;
                         self.window_y_update = false;
                     }
+                    if (mmu.io.stat & 0b00001000) > 0 {
+                        // raise STAT interrupt for mode 0
+                        mmu.io.interrupt |= 0b00000010;
+                    }
                 };
             }
             Mode::VBlank => {
                 if self.dot == 455 && mmu.io.ly == 153 {
                     // end of frame
                     mmu.ppu_mode = Mode::OamScan;
-                    mmu.io.ly = 0;
                     self.wy_condition = false;
                     self.window_y = 0;
-                } else if self.dot == 455 {
-                    mmu.io.ly += 1;
+                    if (mmu.io.stat & 0b00010000) > 0 {
+                        // raise STAT interrupt for mode 1
+                        mmu.io.interrupt |= 0b00000010;
+                    }
                 }
             }
         }
 
         self.dot += 1;
         if self.dot == 456 {
+            // overflow
             self.dot = 0;
+            mmu.io.ly += 1;
+            if mmu.io.ly == 154 {
+                // overflow
+                mmu.io.ly = 0;
+            }
+
+            // log::debug!("{} {} {}", mmu.io.stat, mmu.io.ly, mmu.io.lyc);
+            if (mmu.io.stat & 0b0100_0000) > 0 && mmu.io.ly == mmu.io.lyc {
+                log::debug!("lyc interrupt");
+                mmu.io.interrupt |= 0b00000010;
+            }
         }
+
         Ok(())
     }
 }
