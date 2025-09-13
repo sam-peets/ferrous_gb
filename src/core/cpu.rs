@@ -1,8 +1,6 @@
 use anyhow::anyhow;
-use egui::Button;
 
 use crate::core::{
-    Buttons,
     mmu::Mmu,
     ppu::Ppu,
     register::{CpuRegisters, Register},
@@ -167,7 +165,7 @@ impl Cpu {
                 self.registers.hl.low.read(),
                 self.registers.sp.read(),
                 self.registers.pc.read(),
-                self.mmu.read(self.registers.pc.read() + 0)?,
+                self.mmu.read(self.registers.pc.read())?,
                 self.mmu.read(self.registers.pc.read() + 1)?,
                 self.mmu.read(self.registers.pc.read() + 2)?,
                 self.mmu.read(self.registers.pc.read() + 3)?,
@@ -337,8 +335,6 @@ impl Cpu {
                     0x86 | 0x8e | 0x96 | 0x9e | 0xa6 | 0xae | 0xb6 | 0xbe => {
                         self.res_b_ptr_hl(opcode)
                     }
-
-                    _ => Err(anyhow!("cycle: unknown CB opcode: {opcode:x?}")),
                 }
             }?,
             _ => {
