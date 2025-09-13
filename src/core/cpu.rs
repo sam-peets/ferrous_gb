@@ -1847,7 +1847,7 @@ impl Cpu {
     }
 
     fn halt(&mut self) -> anyhow::Result<()> {
-        log::info!("halt!");
+        log::debug!("halt!");
         self.halted = true;
         self.registers.pc += 1;
         self.delay += 1;

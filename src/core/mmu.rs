@@ -34,9 +34,10 @@ pub struct IoRegisters {
 pub struct Mmu {
     pub ie: u8,
     rom_banks: Vec<Vec<u8>>,
-    cur_bank: usize,
+    rom_bank: usize,
     vram: Vec<u8>,
-    exram: Vec<u8>,
+    exram: Vec<Vec<u8>>,
+    ram_bank: usize,
     wram: Vec<u8>,
     oam: Vec<u8>,
     hram: Vec<u8>,
@@ -62,20 +63,24 @@ impl Mmu {
             ..Default::default()
         };
 
+        let header = CartridgeHeader::new(rom)?;
+        let exram = vec![vec![0; 0x2000]; header.ram_banks];
+
         let mmu = Self {
             io,
             ie: 0,
             rom_banks,
-            cur_bank: 1,
+            rom_bank: 1,
             vram: vec![0; 0x2000],
-            exram: vec![0; 0x2000],
+            exram,
+            ram_bank: 0,
             wram: vec![0; 0x2000],
             oam: vec![0; 0x100],
             hram: vec![0; 0x7f],
             dma_requsted: false,
             buttons: Default::default(),
             ppu_mode: Mode::OamScan,
-            header: CartridgeHeader::new(rom)?,
+            header,
         };
         Ok(mmu)
     }
@@ -91,9 +96,9 @@ impl Mmu {
                     Ok(self.rom_banks[0][a])
                 }
             }
-            0x4000..=0x7fff => Ok(self.rom_banks[self.cur_bank][a - 0x4000]),
+            0x4000..=0x7fff => Ok(self.rom_banks[self.rom_bank][a - 0x4000]),
             0x8000..=0x9fff => Ok(self.vram[a - 0x8000]),
-            0xa000..=0xbfff => Ok(self.exram[a - 0xa000]),
+            0xa000..=0xbfff => Ok(self.exram[self.ram_bank][a - 0xa000]),
             0xc000..=0xdfff => Ok(self.wram[a - 0xc000]),
             0xe000..=0xfdff => self.read(addr - 0x2000), // echo ram
             0xfe00..=0xfe9f => Ok(self.oam[a - 0xfe00]),
@@ -188,11 +193,11 @@ impl Mmu {
                         // TODO: specific mapping behavior
                         // https://gbdev.io/pandocs/MBC1.html#20003fff--rom-bank-number-write-only
 
-                        self.cur_bank = (val & 0b00011111) as usize;
-                        if (self.cur_bank % 0x10) == 0 {
-                            self.cur_bank += 1;
+                        self.rom_bank = (val & 0b00011111) as usize;
+                        if (self.rom_bank % 0x10) == 0 {
+                            self.rom_bank += 1;
                         }
-                        log::debug!("write: switching bank: 0x{:02x?}", self.cur_bank);
+                        log::debug!("write: switching bank: 0x{:02x?}", self.rom_bank);
                         Ok(())
                     }
                     0x4000..=0x5fff => {
@@ -205,6 +210,30 @@ impl Mmu {
                     }
                     _ => Ok(()),
                 },
+                Mapper::Mbc3RamBattery => match a {
+                    0x2000..=0x3fff => {
+                        // rom bank
+                        self.rom_bank = (val & 0b01111111) as usize;
+                        if self.rom_bank == 0 {
+                            self.rom_bank = 1;
+                        }
+                        log::debug!("write: switching bank: 0x{:02x?}", self.rom_bank);
+                        Ok(())
+                    }
+                    // RAM/RTC select
+                    0x4000..=0x5fff => match val {
+                        0x00..=0x07 => {
+                            self.ram_bank = val as usize;
+                            Ok(())
+                        }
+                        0x08..=0x0c => {
+                            // TODO: RTC
+                            Ok(())
+                        }
+                        _ => Ok(()),
+                    },
+                    _ => Ok(()),
+                },
                 _ => Ok(()),
             },
             0x8000..=0x9fff => {
@@ -212,7 +241,7 @@ impl Mmu {
                 Ok(())
             }
             0xa000..=0xbfff => {
-                self.exram[a - 0xa000] = val;
+                self.exram[self.ram_bank][a - 0xa000] = val;
                 Ok(())
             }
             0xc000..=0xdfff => {

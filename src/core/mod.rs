@@ -32,8 +32,8 @@ pub enum Mode {
 pub struct CartridgeHeader {
     pub title: String,
     pub cartridge_type: Mapper,
-    pub rom_banks: u16,
-    pub ram_banks: u16,
+    pub rom_banks: usize,
+    pub ram_banks: usize,
 }
 
 impl CartridgeHeader {
