@@ -2,7 +2,7 @@ use std::ops::DerefMut;
 
 use anyhow::anyhow;
 
-use crate::core::{Buttons, Mode};
+use crate::core::{Buttons, CartridgeHeader, Mapper, Mode};
 
 // const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
@@ -33,7 +33,6 @@ pub struct IoRegisters {
 #[derive(Debug)]
 pub struct Mmu {
     pub ie: u8,
-    rom: Vec<u8>,
     rom_banks: Vec<Vec<u8>>,
     cur_bank: usize,
     vram: Vec<u8>,
@@ -45,26 +44,29 @@ pub struct Mmu {
     pub dma_requsted: bool,
     pub buttons: Buttons,
     pub ppu_mode: Mode,
+    pub header: CartridgeHeader,
 }
 
 impl Mmu {
-    pub fn new(rom: Vec<u8>) -> Self {
-        let low_rom = rom[0..0x4000].to_vec();
+    pub fn new(rom: Vec<u8>) -> anyhow::Result<Self> {
         let mut rom_banks = Vec::new();
-        for i in 1..rom.len() / 0x3fff {
+        for i in 0..rom.len() / 0x4000 {
             rom_banks.push(rom[(i * 0x4000)..((i + 1) * 0x4000)].to_vec());
+        }
+        log::debug!("mmu: new: {} rom banks", rom_banks.len());
+        for (i, ele) in rom_banks.iter().enumerate() {
+            log::debug!("{}: {:02x?}", i, &ele[0..0x10]);
         }
 
         let io = IoRegisters {
             ..Default::default()
         };
 
-        Self {
+        let mmu = Self {
             io,
             ie: 0,
-            rom: low_rom,
             rom_banks,
-            cur_bank: 0,
+            cur_bank: 1,
             vram: vec![0; 0x2000],
             exram: vec![0; 0x2000],
             wram: vec![0; 0x2000],
@@ -73,21 +75,22 @@ impl Mmu {
             dma_requsted: false,
             buttons: Default::default(),
             ppu_mode: Mode::OamScan,
-        }
+            header: CartridgeHeader::new(rom)?,
+        };
+        Ok(mmu)
     }
 
     pub fn read(&self, addr: u16) -> anyhow::Result<u8> {
         log::trace!("read: reading {addr:x?}");
         let a = addr as usize;
         match a {
-            0x0..=0xff => {
-                if self.io.bank == 0 {
+            0x0..=0x3fff => {
+                if (0x0..=0xff).contains(&a) && self.io.bank == 0 {
                     Ok(BOOT[a])
                 } else {
-                    Ok(self.rom[a])
+                    Ok(self.rom_banks[0][a])
                 }
             }
-            0x100..=0x3fff => Ok(self.rom[a]),
             0x4000..=0x7fff => Ok(self.rom_banks[self.cur_bank][a - 0x4000]),
             0x8000..=0x9fff => Ok(self.vram[a - 0x8000]),
             0xa000..=0xbfff => Ok(self.exram[a - 0xa000]),
@@ -163,7 +166,10 @@ impl Mmu {
                     log::trace!("FIXME: mmu: sound register read: {a:x?}");
                     Ok(0xff)
                 }
-                _ => Err(anyhow!("unimplemented IO reg read at {a:x?}")),
+                _ => {
+                    log::warn!("unimplemented IO reg read at {a:x?}");
+                    Ok(0xff)
+                }
             },
             0xff80..=0xfffe => Ok(self.hram[a - 0xff80]),
             0xffff => Ok(self.ie),
@@ -175,14 +181,32 @@ impl Mmu {
         log::trace!("write: writing {val:x?} to {addr:x?}");
         let a = addr as usize;
         match a {
-            0x0..=0x3fff => {
-                // self.rom[a] = val;
-                Ok(())
-            }
-            0x4000..=0x7fff => {
-                // self.rom_banks[self.cur_bank][a - 0x4000] = val;
-                Ok(())
-            }
+            0x0..=0x7fff => match self.header.cartridge_type {
+                Mapper::Mbc1 => match a {
+                    0x2000..=0x3fff => {
+                        // rom bank
+                        // TODO: specific mapping behavior
+                        // https://gbdev.io/pandocs/MBC1.html#20003fff--rom-bank-number-write-only
+
+                        self.cur_bank = (val & 0b00011111) as usize;
+                        if (self.cur_bank % 0x10) == 0 {
+                            self.cur_bank += 1;
+                        }
+                        log::debug!("write: switching bank: 0x{:02x?}", self.cur_bank);
+                        Ok(())
+                    }
+                    0x4000..=0x5fff => {
+                        // upper ram bank
+                        todo!()
+                    }
+                    0x6000..=0x7fff => {
+                        // banking mode select
+                        todo!()
+                    }
+                    _ => Ok(()),
+                },
+                _ => Ok(()),
+            },
             0x8000..=0x9fff => {
                 self.vram[a - 0x8000] = val;
                 Ok(())

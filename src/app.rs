@@ -27,8 +27,9 @@ impl eframe::App for TemplateApp {
         if let Some(promise) = &self.promise {
             if let Some(Some(rom)) = promise.ready() {
                 self.screen = Some(Screen {
-                    cpu: Cpu::new(rom.clone()),
-                    // cpu: Cpu::new_fastboot(rom.clone()),
+                    // TODO: show a modal or something on an error
+                    // cpu: Cpu::new(rom.clone()).unwrap(),
+                    cpu: Cpu::new_fastboot(rom.clone()).unwrap(),
                     texture: ctx.load_texture(
                         "screen",
                         egui::ColorImage::filled([160, 144], Color32::BLACK),
@@ -39,7 +40,6 @@ impl eframe::App for TemplateApp {
                 self.promise = None;
             }
         }
-
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 if ui.button("Open ROM").clicked() {
@@ -54,10 +54,14 @@ impl eframe::App for TemplateApp {
                 }
             })
         });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(screen) = &mut self.screen {
                 screen.ui(ui);
             }
         });
+        // request a repaint to avoid egui repaint behaviour
+        // TODO: is there a better way around this? maybe...
+        ctx.request_repaint();
     }
 }

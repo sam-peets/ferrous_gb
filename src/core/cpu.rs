@@ -20,10 +20,10 @@ pub struct Cpu {
 }
 
 impl Cpu {
-    pub fn new(rom: Vec<u8>) -> Self {
-        Cpu {
+    pub fn new(rom: Vec<u8>) -> anyhow::Result<Self> {
+        let cpu = Cpu {
             registers: CpuRegisters::default(),
-            mmu: Mmu::new(rom),
+            mmu: Mmu::new(rom)?,
             delay: 0,
             cycles: 0,
             ppu: Ppu::new(),
@@ -31,11 +31,12 @@ impl Cpu {
             logging: false,
             halted: false,
             dma_idx: 0,
-        }
+        };
+        Ok(cpu)
     }
 
-    pub fn new_fastboot(rom: Vec<u8>) -> Self {
-        let mut cpu = Cpu::new(rom);
+    pub fn new_fastboot(rom: Vec<u8>) -> anyhow::Result<Self> {
+        let mut cpu = Cpu::new(rom)?;
         cpu.registers.af.write(0x01b0);
         cpu.registers.bc.write(0x0013);
         cpu.registers.de.write(0x00d8);
@@ -43,7 +44,7 @@ impl Cpu {
         cpu.registers.pc.write(0x0100);
         cpu.registers.sp.write(0xfffe);
         cpu.mmu.io.bank = 0xff;
-        cpu
+        Ok(cpu)
     }
 
     pub fn call_interrupt(&mut self, addr: u16, b: u8) -> anyhow::Result<()> {

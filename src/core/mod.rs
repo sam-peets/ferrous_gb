@@ -1,3 +1,8 @@
+use std::iter::Map;
+
+use anyhow::anyhow;
+use eframe::glow::ATOMIC_COUNTER_BUFFER_REFERENCED_BY_VERTEX_SHADER;
+
 pub mod cpu;
 pub mod mmu;
 mod ppu;
@@ -23,25 +28,69 @@ pub enum Mode {
     VBlank = 3,
 }
 
+#[derive(Debug)]
 pub struct CartridgeHeader {
     pub title: String,
-    pub cartridge_type: u8,
-    pub rom_size: u8,
-    pub ram_size: u8,
+    pub cartridge_type: Mapper,
+    pub rom_banks: u16,
+    pub ram_banks: u16,
 }
 
 impl CartridgeHeader {
     pub fn new(rom: Vec<u8>) -> anyhow::Result<Self> {
-        let title = String::from_utf8(rom[0x134..=0x143].to_vec())?;
-        let cartridge_type = rom[0x147];
-        let rom_size = rom[0x148];
-        let ram_size = rom[0x149];
+        let title = String::from_utf8_lossy(&rom[0x134..=0x143]).to_string();
+        let cartridge_type = rom[0x147].try_into()?;
+        let rom_banks = match rom[0x148] {
+            0x00 => 2,
+            0x01 => 4,
+            0x02 => 8,
+            0x03 => 16,
+            0x04 => 32,
+            0x05 => 64,
+            0x06 => 128,
+            0x07 => todo!("CartridgeHeader: rom bank for 256, this needs some more thought"),
+            0x08 => todo!("CartridgeHeader: rom bank for 512, this needs some more thought"),
+            0x52 => 72,
+            0x53 => 80,
+            0x54 => 96,
+            _ => return Err(anyhow!("CartridgeHeader: unknown ROM size")),
+        };
+        let ram_banks = match rom[0x149] {
+            0x00 => 0,
+            0x02 => 1,
+            0x03 => 4,
+            0x04 => 16,
+            0x05 => 8,
+            _ => return Err(anyhow!("CartridgeHeader: unknown RAM size")),
+        };
 
-        Ok(CartridgeHeader {
+        let header = CartridgeHeader {
             title,
             cartridge_type,
-            rom_size,
-            ram_size,
-        })
+            rom_banks,
+            ram_banks,
+        };
+        log::info!("CartridgeHeader: new: {header:?}");
+        Ok(header)
+    }
+}
+
+#[derive(Debug)]
+pub enum Mapper {
+    RomOnly = 0x00,
+    Mbc1 = 0x01,
+    Mbc3RamBattery = 0x13,
+}
+
+impl TryFrom<u8> for Mapper {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(Mapper::RomOnly),
+            0x01 => Ok(Mapper::Mbc1),
+            0x13 => Ok(Mapper::Mbc3RamBattery),
+            _ => Err(anyhow!("unknown mapper: 0x{value:02x?}")),
+        }
     }
 }
