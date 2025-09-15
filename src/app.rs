@@ -36,6 +36,7 @@ impl eframe::App for TemplateApp {
                         egui::TextureOptions::NEAREST,
                     ),
                     last_frame: 0,
+                    handle: None,
                 });
                 self.promise = None;
             }

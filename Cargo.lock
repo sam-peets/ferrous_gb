@@ -31,7 +31,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
 dependencies = [
  "cfg-if",
- "getrandom",
  "once_cell",
  "version_check",
  "zerocopy",
@@ -1344,7 +1343,6 @@ dependencies = [
  "objc2-foundation 0.3.1",
  "once_cell",
  "raw-window-handle",
- "wayland-sys",
  "windows-sys 0.52.0",
  "x11-dl",
 ]
@@ -3249,19 +3247,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wayland-protocols-plasma"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fd38cdad69b56ace413c6bcc1fbf5acc5e2ef4af9d5f8f1f9570c0c83eae175"
-dependencies = [
- "bitflags 2.9.1",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
-
-[[package]]
 name = "wayland-protocols-wlr"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3789,7 +3774,6 @@ version = "0.30.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4409c10174df8779dc29a4788cac85ed84024ccbc1743b776b21a520ee1aaf4"
 dependencies = [
- "ahash",
  "android-activity",
  "atomic-waker",
  "bitflags 2.9.1",
@@ -3804,7 +3788,6 @@ dependencies = [
  "dpi",
  "js-sys",
  "libc",
- "memmap2",
  "ndk",
  "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
@@ -3816,16 +3799,11 @@ dependencies = [
  "raw-window-handle",
  "redox_syscall 0.4.1",
  "rustix 0.38.44",
- "smithay-client-toolkit",
  "smol_str",
  "tracing",
  "unicode-segmentation",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-plasma",
  "web-sys",
  "web-time",
  "windows-sys 0.52.0",

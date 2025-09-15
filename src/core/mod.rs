@@ -79,6 +79,7 @@ impl CartridgeHeader {
 pub enum Mapper {
     RomOnly = 0x00,
     Mbc1 = 0x01,
+    Mbc3TimerRamBattery = 0x10,
     Mbc3RamBattery = 0x13,
 }
 
@@ -89,6 +90,7 @@ impl TryFrom<u8> for Mapper {
         match value {
             0x00 => Ok(Mapper::RomOnly),
             0x01 => Ok(Mapper::Mbc1),
+            0x10 => Ok(Mapper::Mbc3TimerRamBattery),
             0x13 => Ok(Mapper::Mbc3RamBattery),
             _ => Err(anyhow!("unknown mapper: 0x{value:02x?}")),
         }

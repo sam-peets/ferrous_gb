@@ -25,8 +25,8 @@ pub struct IoRegisters {
     pub bgp: u8,       // 0xff47
     pub obp0: u8,      // 0xff48
     pub obp1: u8,      // 0xff49
-    pub wy: u8,        //0xff4a
-    pub wx: u8,        //0xff4b
+    pub wy: u8,        // 0xff4a
+    pub wx: u8,        // 0xff4b
     pub bank: u8,      // 0xff50 - bootrom mapping control
 }
 
@@ -210,7 +210,7 @@ impl Mmu {
                     }
                     _ => Ok(()),
                 },
-                Mapper::Mbc3RamBattery => match a {
+                Mapper::Mbc3RamBattery | Mapper::Mbc3TimerRamBattery => match a {
                     0x2000..=0x3fff => {
                         // rom bank
                         self.rom_bank = (val & 0b01111111) as usize;
