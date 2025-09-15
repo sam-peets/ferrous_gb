@@ -23,11 +23,8 @@ impl Screen {
         }
     }
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
-        for i in 0..(70224 / 4) {
+        for i in 0..70224 {
             // is this right?
-            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
-            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
-            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
             self.cpu.cycle(i)?;
         }

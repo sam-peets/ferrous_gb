@@ -28,7 +28,7 @@ impl Cpu {
             cycles: 0,
             ppu: Ppu::new(),
             ime: false,
-            logging: false,
+            logging: true,
             halted: false,
             dma_idx: 0,
         };
@@ -63,24 +63,31 @@ impl Cpu {
     pub fn cycle(&mut self, clock: i32) -> anyhow::Result<()> {
         if (self.mmu.io.tac & 0b00000100) > 0 {
             // timer is enabled, tick it
-            let interval = match self.mmu.io.tac & 0b00000011 {
-                0b00 => 256,
-                0b01 => 4,
-                0b10 => 16,
-                0b11 => 64,
+            let interval = match self.mmu.io.tac & 0b0000_0011 {
+                0b00 => 1024,
+                0b01 => 16,
+                0b10 => 64,
+                0b11 => 256,
                 _ => unreachable!(),
             };
             if clock % interval == 0 {
                 let (val, overflow) = self.mmu.io.tima.overflowing_add(1);
                 self.mmu.io.tima = val;
                 if overflow {
+                    log::debug!("timer overflow");
                     self.mmu.io.interrupt |= 0b00000100;
+                    self.mmu.io.tima = self.mmu.io.tma;
                 }
             }
         }
-        if clock % 64 == 0 {
+        if clock % 256 == 0 {
             let (val, _) = self.mmu.io.div.overflowing_add(1);
             self.mmu.io.div = val;
+        }
+
+        if clock % 4 != 0 {
+            // not an m-cycle
+            return Ok(());
         }
 
         if self.mmu.dma_requsted {

@@ -13,6 +13,7 @@ pub struct IoRegisters {
     pub sc: u8,        // 0xff02
     pub div: u8,       // 0xff04
     pub tima: u8,      // 0xff05
+    pub tma: u8,       // 0xff06
     pub tac: u8,       // 0xff07
     pub interrupt: u8, // 0xff0f
     pub lcdc: u8,      // 0xff40
@@ -146,6 +147,7 @@ impl Mmu {
                 0xff02 => Ok(self.io.sc),
                 0xff04 => Ok(self.io.div),
                 0xff05 => Ok(self.io.tima),
+                0xff06 => Ok(self.io.tma),
                 0xff07 => Ok(self.io.tac),
                 0xff0f => Ok(self.io.interrupt),
                 0xff40 => Ok(self.io.lcdc),
@@ -278,6 +280,10 @@ impl Mmu {
                 }
                 0xff05 => {
                     self.io.tima = val;
+                    Ok(())
+                }
+                0xff06 => {
+                    self.io.tma = val;
                     Ok(())
                 }
                 0xff07 => {

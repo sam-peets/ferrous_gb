@@ -302,9 +302,6 @@ impl Ppu {
                     if mmu.io.ly == mmu.io.wy {
                         self.wy_condition = true;
                     }
-                    if mmu.io.ly == 0 {
-                        // self.screen = vec![0; 160 * 144];
-                    }
                     if (mmu.io.stat & 0b00100000) > 0 {
                         // raise STAT interrupt for mode 2
                         mmu.io.interrupt |= 0b00000010;
