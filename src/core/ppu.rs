@@ -122,7 +122,7 @@ impl Ppu {
 
     fn draw_window(&mut self, mmu: &mut Mmu) -> anyhow::Result<u8> {
         let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
-        let window_tilemap_base = if (mmu.io.lcdc & 0b01000000) > 0 {
+        let window_tilemap_base = if (mmu.io.lcdc & 0b0100_0000) > 0 {
             0x9c00
         } else {
             0x9800

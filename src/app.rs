@@ -28,8 +28,8 @@ impl eframe::App for TemplateApp {
             if let Some(Some(rom)) = promise.ready() {
                 self.screen = Some(Screen {
                     // TODO: show a modal or something on an error
-                    // cpu: Cpu::new(rom.clone()).unwrap(),
-                    cpu: Cpu::new_fastboot(rom.clone()).unwrap(),
+                    cpu: Cpu::new(rom.clone()).unwrap(),
+                    // cpu: Cpu::new_fastboot(rom.clone()).unwrap(),
                     texture: ctx.load_texture(
                         "screen",
                         egui::ColorImage::filled([160, 144], Color32::BLACK),

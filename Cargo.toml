@@ -27,12 +27,14 @@ rfd = "0.15.4"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.11.8"
 poll-promise = { version = "0.3.0", features = ["smol", "smol_tick_poll"] }
+cpal = "0.16.0"
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4.50"
 web-sys = "0.3.70"              # to access the DOM (to hide the loading text)
 poll-promise = { version = "0.3.0", features = ["web"] }
+cpal = { version = "0.16.0", features = ["wasm-bindgen"] }
 
 [profile.release]
 opt-level = 'z'
