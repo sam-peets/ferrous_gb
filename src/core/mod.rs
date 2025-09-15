@@ -56,7 +56,7 @@ impl CartridgeHeader {
             _ => return Err(anyhow!("CartridgeHeader: unknown ROM size")),
         };
         let ram_banks = match rom[0x149] {
-            0x00 => 0,
+            0x00 => 1, // technically zero, but making it 1 here for compat with no-mapper
             0x02 => 1,
             0x03 => 4,
             0x04 => 16,

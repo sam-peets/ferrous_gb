@@ -77,7 +77,7 @@ impl Ppu {
         }
     }
 
-    fn draw_bg(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
+    fn draw_bg(&mut self, mmu: &mut Mmu) -> anyhow::Result<u8> {
         let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
         let bg_tilemap_base = if (mmu.io.lcdc & 0b00001000) > 0 {
             0x9c00
@@ -109,18 +109,18 @@ impl Ppu {
         let b2 = mmu.read(tile_row + 1)?;
         let b2 = bit(b2, 7 - tile_col_d);
         let color = (b2 << 1) | b1;
-        self.screen[screen_idx] = match color {
-            0b00 => mmu.io.bgp & 0b00000011,
-            0b01 => (mmu.io.bgp & 0b00001100) >> 2,
-            0b10 => (mmu.io.bgp & 0b00110000) >> 4,
-            0b11 => (mmu.io.bgp & 0b11000000) >> 6,
-            _ => unreachable!("ppu: draw_bg: invalid color {color:02x?}"),
-        };
+        // self.screen[screen_idx] = match color {
+        //     0b00 => mmu.io.bgp & 0b00000011,
+        //     0b01 => (mmu.io.bgp & 0b00001100) >> 2,
+        //     0b10 => (mmu.io.bgp & 0b00110000) >> 4,
+        //     0b11 => (mmu.io.bgp & 0b11000000) >> 6,
+        //     _ => unreachable!("ppu: draw_bg: invalid color {color:02x?}"),
+        // };
 
-        Ok(())
+        Ok(color)
     }
 
-    fn draw_window(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
+    fn draw_window(&mut self, mmu: &mut Mmu) -> anyhow::Result<u8> {
         let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
         let window_tilemap_base = if (mmu.io.lcdc & 0b01000000) > 0 {
             0x9c00
@@ -152,18 +152,18 @@ impl Ppu {
         let b2 = mmu.read(tile_row + 1)?;
         let b2 = bit(b2, 7 - tile_col_d);
         let color = (b2 << 1) | b1;
-        self.screen[screen_idx] = match color {
-            0b00 => mmu.io.bgp & 0b00000011,
-            0b01 => (mmu.io.bgp & 0b00001100) >> 2,
-            0b10 => (mmu.io.bgp & 0b00110000) >> 4,
-            0b11 => (mmu.io.bgp & 0b11000000) >> 6,
-            _ => unreachable!("ppu: draw_window: invalid color {color:02x?}"),
-        };
+        // self.screen[screen_idx] = match color {
+        //     0b00 => mmu.io.bgp & 0b00000011,
+        //     0b01 => (mmu.io.bgp & 0b00001100) >> 2,
+        //     0b10 => (mmu.io.bgp & 0b00110000) >> 4,
+        //     0b11 => (mmu.io.bgp & 0b11000000) >> 6,
+        //     _ => unreachable!("ppu: draw_window: invalid color {color:02x?}"),
+        // };
 
-        Ok(())
+        Ok(color)
     }
 
-    fn draw_objects(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
+    fn draw_objects(&mut self, mmu: &mut Mmu) -> anyhow::Result<Option<(u8, bool, u8)>> {
         // todo!()
         let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
         let vram_base = 0x8000_u16;
@@ -220,15 +220,16 @@ impl Ppu {
                 mmu.io.obp0
             };
 
-            self.screen[screen_idx] = match color {
-                0b00 => palette & 0b00000011,
-                0b01 => (palette & 0b00001100) >> 2,
-                0b10 => (palette & 0b00110000) >> 4,
-                0b11 => (palette & 0b11000000) >> 6,
-                _ => unreachable!("ppu: draw_objects: invalid color {color:02x?}"),
-            };
+            // self.screen[screen_idx] = match color {
+            //     0b00 => palette & 0b00000011,
+            //     0b01 => (palette & 0b00001100) >> 2,
+            //     0b10 => (palette & 0b00110000) >> 4,
+            //     0b11 => (palette & 0b11000000) >> 6,
+            //     _ => unreachable!("ppu: draw_objects: invalid color {color:02x?}"),
+            // };
+            return Ok(Some((color, (obj.attributes & 0b1000_0000) > 0, palette)));
         }
-        Ok(())
+        Ok(None)
     }
 
     pub fn clock(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
@@ -292,6 +293,7 @@ impl Ppu {
                         };
                         self.objects.push(obj);
                     }
+                    self.objects.sort_by_key(|obj| obj.x);
                 }
 
                 if self.dot == 79 {
@@ -313,25 +315,60 @@ impl Ppu {
                 if self.lx + 7 == mmu.io.wx {
                     self.wx_condition = true;
                 }
+                let mut bg_dot = None;
+                let mut window_dot = None;
+                let mut object_dot = None;
+                let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
 
                 if (mmu.io.lcdc & 0b0000_0001) > 0 {
                     // BG enabled
-                    self.draw_bg(mmu)?;
+                    bg_dot = Some(self.draw_bg(mmu)?);
 
                     // window is only drawn if BG is enabled
                     if (mmu.io.lcdc & 0b0010_0000) > 0 && self.wy_condition && self.wx_condition {
                         self.window_y_update = true;
-                        self.draw_window(mmu)?;
+                        window_dot = Some(self.draw_window(mmu)?);
                     }
                 } else {
                     // BG disabled, set to white
-                    let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
                     self.screen[screen_idx] = mmu.io.bgp & 0b00000011;
                 }
 
                 if (mmu.io.lcdc & 0b0000_0010) > 0 {
-                    self.draw_objects(mmu)?;
+                    object_dot = self.draw_objects(mmu)?;
                 }
+
+                let bg_idx = window_dot.unwrap_or(bg_dot.unwrap_or(0));
+
+                let obj_color = if let Some((dot, priority, palette)) = object_dot {
+                    if priority && bg_idx != 0 {
+                        None
+                    } else {
+                        Some(match dot {
+                            0b00 => palette & 0b00000011,
+                            0b01 => (palette & 0b00001100) >> 2,
+                            0b10 => (palette & 0b00110000) >> 4,
+                            0b11 => (palette & 0b11000000) >> 6,
+                            _ => unreachable!("ppu: draw_objects: invalid color {dot:02x?}"),
+                        })
+                    }
+                } else {
+                    None
+                };
+
+                let color = if let Some(color) = obj_color {
+                    color
+                } else {
+                    match bg_idx {
+                        0b00 => mmu.io.bgp & 0b00000011,
+                        0b01 => (mmu.io.bgp & 0b00001100) >> 2,
+                        0b10 => (mmu.io.bgp & 0b00110000) >> 4,
+                        0b11 => (mmu.io.bgp & 0b11000000) >> 6,
+                        _ => unreachable!("ppu: draw_window: invalid color {bg_idx:02x?}"),
+                    }
+                };
+
+                self.screen[screen_idx] = color;
 
                 self.lx += 1;
                 if self.lx == 160 {
