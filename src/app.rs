@@ -43,16 +43,19 @@ impl eframe::App for TemplateApp {
         }
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
-                if ui.button("Open ROM").clicked() {
-                    self.promise = Some(poll_promise::Promise::spawn_local(async {
-                        if let Some(file) = rfd::AsyncFileDialog::new().pick_file().await {
-                            let f = file.read().await;
-                            Some(f)
-                        } else {
-                            None
-                        }
-                    }));
-                }
+                ui.menu_button("File", |ui| {
+                    if ui.button("Open ROM").clicked() {
+                        self.promise = Some(poll_promise::Promise::spawn_local(async {
+                            if let Some(file) = rfd::AsyncFileDialog::new().pick_file().await {
+                                let f = file.read().await;
+                                Some(f)
+                            } else {
+                                None
+                            }
+                        }));
+                    }
+                    ui.menu_button("Load Example", |ui| {})
+                })
             })
         });
 
@@ -61,6 +64,7 @@ impl eframe::App for TemplateApp {
                 screen.ui(ui);
             }
         });
+
         // request a repaint to avoid egui repaint behaviour
         // TODO: is there a better way around this? maybe...
         ctx.request_repaint();

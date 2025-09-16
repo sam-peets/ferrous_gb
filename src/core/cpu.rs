@@ -17,6 +17,7 @@ pub struct Cpu {
     pub logging: bool,
     pub halted: bool,
     pub dma_idx: u8,
+    pub timer_overflow: bool,
 }
 
 impl Cpu {
@@ -28,9 +29,10 @@ impl Cpu {
             cycles: 0,
             ppu: Ppu::new(),
             ime: false,
-            logging: true,
+            logging: false,
             halted: false,
             dma_idx: 0,
+            timer_overflow: true,
         };
         Ok(cpu)
     }
@@ -60,34 +62,49 @@ impl Cpu {
         Ok(())
     }
 
-    pub fn cycle(&mut self, clock: i32) -> anyhow::Result<()> {
+    pub fn cycle(&mut self, sys: u16) -> anyhow::Result<()> {
+        self.mmu.io.div = ((sys & 0xff00) >> 8) as u8;
+        if sys % 4 != 0 {
+            // only clock the cpu on an m-cycle
+            return Ok(());
+        }
+        if self.logging {
+            println!(
+                "SYS: {} IME: {} IE: {:x?} IF: {:x?} TIMA: {:x?} TAC: {:x?} TMA: {:x?} DIV: {:x?}",
+                sys,
+                self.ime,
+                self.mmu.ie,
+                self.mmu.io.interrupt,
+                self.mmu.io.tima,
+                self.mmu.io.tac,
+                self.mmu.io.tma,
+                self.mmu.io.div,
+            );
+        }
+        if self.timer_overflow {
+            // should be delayed by one m-cycle
+            self.mmu.io.interrupt |= 0b00000100;
+            self.mmu.io.tima = self.mmu.io.tma;
+            self.timer_overflow = false;
+        }
         if (self.mmu.io.tac & 0b00000100) > 0 {
             // timer is enabled, tick it
             let interval = match self.mmu.io.tac & 0b0000_0011 {
-                0b00 => 1024,
-                0b01 => 16,
-                0b10 => 64,
-                0b11 => 256,
+                0b00 => 256,
+                0b01 => 4,
+                0b10 => 16,
+                0b11 => 64,
                 _ => unreachable!(),
-            };
-            if clock % interval == 0 {
+            } * 4;
+
+            if sys % interval == 0 {
                 let (val, overflow) = self.mmu.io.tima.overflowing_add(1);
                 self.mmu.io.tima = val;
                 if overflow {
                     log::debug!("timer overflow");
-                    self.mmu.io.interrupt |= 0b00000100;
-                    self.mmu.io.tima = self.mmu.io.tma;
+                    self.timer_overflow = true;
                 }
             }
-        }
-        if clock % 256 == 0 {
-            let (val, _) = self.mmu.io.div.overflowing_add(1);
-            self.mmu.io.div = val;
-        }
-
-        if clock % 4 != 0 {
-            // not an m-cycle
-            return Ok(());
         }
 
         if self.mmu.dma_requsted {
@@ -177,10 +194,6 @@ impl Cpu {
                 self.mmu.read(self.registers.pc.read() + 1)?,
                 self.mmu.read(self.registers.pc.read() + 2)?,
                 self.mmu.read(self.registers.pc.read() + 3)?,
-            );
-            println!(
-                "IME: {} IE: {:x?} IF: {:x?}",
-                self.ime, self.mmu.ie, self.mmu.io.interrupt
             );
         }
 
@@ -506,6 +519,7 @@ impl Cpu {
             .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
         self.registers.pc.write(addr);
         self.registers.sp -= 2;
+        self.delay += 6;
         log::trace!("call_u16: calling subroutine 0x{addr:x?}");
         Ok(())
     }
@@ -903,6 +917,7 @@ impl Cpu {
             .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
         self.registers.pc.write(addr);
         self.registers.sp -= 2;
+        self.delay += 6;
         log::trace!("call_cond_u16: calling subroutine 0x{addr:x?}");
         Ok(())
     }
@@ -1822,7 +1837,7 @@ impl Cpu {
         let val = target & !(1 << bit);
         self.mmu.write(self.registers.hl.read(), val)?;
         self.registers.pc += 2;
-        self.delay += 3;
+        self.delay += 4;
         Ok(())
     }
 

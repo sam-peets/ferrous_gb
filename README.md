@@ -1,12 +1,3 @@
 Blargg Test Results:
-- PASS 01
-- FAIL 02 - EI
-- PASS 03
-- PASS 04
-- PASS 05
-- PASS 06
-- PASS 07
-- PASS 08
-- PASS 09
-- PASS 10
-- PASS 11
+- `cpu_instrs`: PASS
+- `instr_timing`: PASS

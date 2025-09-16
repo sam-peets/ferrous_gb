@@ -23,10 +23,12 @@ impl Screen {
         }
     }
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
+        let mut sys = 0u16;
         for i in 0..70224 {
             // is this right?
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
-            self.cpu.cycle(i)?;
+            self.cpu.cycle(sys)?;
+            sys = sys.overflowing_add(1).0;
         }
         let f = self
             .cpu
@@ -34,10 +36,10 @@ impl Screen {
             .frame(&mut self.cpu.mmu)?
             .iter()
             .map(|x| match x {
-                0 => Color32::from_hex("#9bbc0f").unwrap(),
-                1 => Color32::from_hex("#8bac0f").unwrap(),
-                2 => Color32::from_hex("#306230").unwrap(),
-                3 => Color32::from_hex("#0f380f").unwrap(),
+                0 => Color32::from_hex("#e0f8d0").unwrap(),
+                1 => Color32::from_hex("#88c070").unwrap(),
+                2 => Color32::from_hex("#346856").unwrap(),
+                3 => Color32::from_hex("#081820").unwrap(),
                 _ => unreachable!(),
             })
             .collect();
