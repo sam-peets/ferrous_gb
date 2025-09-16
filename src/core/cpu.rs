@@ -59,6 +59,7 @@ impl Cpu {
         self.registers.sp -= 2;
         self.registers.pc.write(addr);
         self.halted = false;
+        self.delay += 5;
         Ok(())
     }
 

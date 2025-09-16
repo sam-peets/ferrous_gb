@@ -250,10 +250,14 @@ impl Ppu {
                         mmu.ppu_mode = Mode::VBlank;
                         mmu.io.interrupt |= 0b00000001; // request vblank interrupt
                         self.window_y = 0;
+                        if (mmu.io.stat & 0b00010000) > 0 {
+                            // raise STAT interrupt for mode 1
+                            mmu.io.interrupt |= 0b00000010;
+                        }
                     } else {
                         mmu.ppu_mode = Mode::OamScan;
                         self.wx_condition = false;
-                        if (mmu.io.stat & 0b00010000) > 0 {
+                        if (mmu.io.stat & 0b00100000) > 0 {
                             // raise STAT interrupt for mode 1
                             mmu.io.interrupt |= 0b00000010;
                         }
@@ -298,18 +302,14 @@ impl Ppu {
 
                 if self.dot == 79 {
                     mmu.ppu_mode = Mode::Drawing;
-                    self.penalty = 12 + (mmu.io.scx % 8) as usize;
+                    // self.penalty = 12 + (mmu.io.scx % 8) as usize;
                     if mmu.io.ly == mmu.io.wy {
                         self.wy_condition = true;
-                    }
-                    if (mmu.io.stat & 0b00100000) > 0 {
-                        // raise STAT interrupt for mode 2
-                        mmu.io.interrupt |= 0b00000010;
                     }
                 }
             }
             Mode::Drawing => {
-                if self.lx + 7 == mmu.io.wx {
+                if self.lx + 7 >= mmu.io.wx {
                     self.wx_condition = true;
                 }
                 let mut bg_dot = None;
@@ -387,7 +387,7 @@ impl Ppu {
                     mmu.ppu_mode = Mode::OamScan;
                     self.wy_condition = false;
                     self.window_y = 0;
-                    if (mmu.io.stat & 0b00010000) > 0 {
+                    if (mmu.io.stat & 0b00100000) > 0 {
                         // raise STAT interrupt for mode 1
                         mmu.io.interrupt |= 0b00000010;
                     }

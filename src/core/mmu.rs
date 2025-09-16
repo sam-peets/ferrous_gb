@@ -165,6 +165,7 @@ impl Mmu {
                 // 0xff44 => Ok(0x90),
                 0xff45 => Ok(self.io.lyc),
                 0xff46 => Ok(self.io.dma),
+                0xff47 => Ok(self.io.bgp),
                 0xff48 => Ok(self.io.obp0),
                 0xff49 => Ok(self.io.obp1),
                 0xff4a => Ok(self.io.wy),
@@ -321,6 +322,7 @@ impl Mmu {
                     Ok(())
                 }
                 0xff45 => {
+                    log::debug!("mmu: LYC write: 0x{val:x?}");
                     self.io.lyc = val;
                     Ok(())
                 }
