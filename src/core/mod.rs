@@ -3,7 +3,7 @@ use std::iter::Map;
 use anyhow::anyhow;
 use eframe::glow::ATOMIC_COUNTER_BUFFER_REFERENCED_BY_VERTEX_SHADER;
 
-use crate::core::mbc::{Mbc, mbc1::Mbc1, rom_only::RomOnly};
+use crate::core::mbc::{Mbc, mbc1::Mbc1, mbc3::Mbc3, rom_only::RomOnly};
 
 pub mod cpu;
 pub mod mbc;
@@ -73,6 +73,12 @@ impl CartridgeHeader {
             Mapper::Mbc1 => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, false)),
             Mapper::Mbc1Ram => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, false)),
             Mapper::Mbc1RamBattery => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, true)),
+            Mapper::Mbc3RamBattery => {
+                Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, true, false))
+            }
+            Mapper::Mbc3TimerRamBattery => {
+                Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, true, true))
+            }
             m => todo!("mmu: unimplemented mapper: {m:?}"),
         };
 
@@ -88,6 +94,7 @@ impl CartridgeHeader {
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum Mapper {
     RomOnly = 0x00,

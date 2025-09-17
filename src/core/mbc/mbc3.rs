@@ -15,7 +15,13 @@ pub struct Mbc3 {
 }
 
 impl Mbc3 {
-    pub fn new(rom: Vec<u8>, rom_banks: usize, ram_banks: usize, battery: bool) -> Self {
+    pub fn new(
+        rom: Vec<u8>,
+        rom_banks: usize,
+        ram_banks: usize,
+        battery: bool,
+        timer: bool,
+    ) -> Self {
         let rom = rom.chunks(0x4000).map(|x| x.to_vec()).collect();
         let ram = vec![vec![0; 0x2000]; ram_banks];
         Self {
@@ -39,7 +45,7 @@ impl Mbc for Mbc3 {
         match addr {
             0x0000..=0x3fff => Ok(self.rom[0][addr]),
             0x4000..=0x7fff => Ok(self.rom[rom_bank % self.rom_banks][addr - 0x4000]),
-            0xa000..=0xbfff => match self.rom_bank {
+            0xa000..=0xbfff => match self.ram_bank {
                 0x0..=0x07 => {
                     // ram banks
                     Ok(self.ram[ram_bank % self.ram_banks][addr - 0xa000])
@@ -48,7 +54,7 @@ impl Mbc for Mbc3 {
                     // TODO: rtc banks
                     Ok(0xff)
                 }
-                _ => Err(anyhow!("Mbc3: bad rom bank: 0x{ram_bank:02x?}")),
+                _ => Err(anyhow!("Mbc3: bad ram bank: 0x{ram_bank:02x?}")),
             },
             _ => Err(anyhow!("Mbc3: invalid read: 0x{addr:04x?}")),
         }
