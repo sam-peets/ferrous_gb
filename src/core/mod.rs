@@ -1,7 +1,4 @@
-use std::iter::Map;
-
 use anyhow::anyhow;
-use eframe::glow::ATOMIC_COUNTER_BUFFER_REFERENCED_BY_VERTEX_SHADER;
 
 use crate::core::mbc::{Mbc, mbc1::Mbc1, mbc3::Mbc3, rom_only::RomOnly};
 
@@ -52,8 +49,8 @@ impl CartridgeHeader {
             0x04 => 32,
             0x05 => 64,
             0x06 => 128,
-            0x07 => todo!("CartridgeHeader: rom bank for 256, this needs some more thought"),
-            0x08 => todo!("CartridgeHeader: rom bank for 512, this needs some more thought"),
+            0x07 => 256,
+            0x08 => 512,
             0x52 => 72,
             0x53 => 80,
             0x54 => 96,
@@ -79,6 +76,7 @@ impl CartridgeHeader {
             Mapper::Mbc3TimerRamBattery => {
                 Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, true, true))
             }
+            Mapper::Mbc3 => Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, false, false)),
             m => todo!("mmu: unimplemented mapper: {m:?}"),
         };
 
@@ -102,6 +100,7 @@ pub enum Mapper {
     Mbc1Ram = 0x02,
     Mbc1RamBattery = 0x03,
     Mbc3TimerRamBattery = 0x10,
+    Mbc3 = 0x11,
     Mbc3RamBattery = 0x13,
 }
 
@@ -115,6 +114,7 @@ impl TryFrom<u8> for Mapper {
             0x02 => Ok(Mapper::Mbc1Ram),
             0x03 => Ok(Mapper::Mbc1RamBattery),
             0x10 => Ok(Mapper::Mbc3TimerRamBattery),
+            0x11 => Ok(Mapper::Mbc3),
             0x13 => Ok(Mapper::Mbc3RamBattery),
             _ => Err(anyhow!("unknown mapper: 0x{value:02x?}")),
         }
