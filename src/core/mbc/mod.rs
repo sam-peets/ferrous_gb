@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 pub mod mbc1;
+pub mod mbc3;
 pub mod rom_only;
 
 pub trait Mbc: Debug {
