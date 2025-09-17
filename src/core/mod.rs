@@ -3,7 +3,10 @@ use std::iter::Map;
 use anyhow::anyhow;
 use eframe::glow::ATOMIC_COUNTER_BUFFER_REFERENCED_BY_VERTEX_SHADER;
 
+use crate::core::mbc::{Mbc, mbc1::Mbc1, rom_only::RomOnly};
+
 pub mod cpu;
+pub mod mbc;
 pub mod mmu;
 mod ppu;
 pub mod register;
@@ -34,10 +37,11 @@ pub struct CartridgeHeader {
     pub cartridge_type: Mapper,
     pub rom_banks: usize,
     pub ram_banks: usize,
+    pub mbc: Box<dyn Mbc>,
 }
 
 impl CartridgeHeader {
-    pub fn new(rom: Vec<u8>) -> anyhow::Result<Self> {
+    pub fn new(rom: &Vec<u8>) -> anyhow::Result<Self> {
         let title = String::from_utf8_lossy(&rom[0x134..=0x143]).to_string();
         let cartridge_type = rom[0x147].try_into()?;
         let rom_banks = match rom[0x148] {
@@ -64,11 +68,20 @@ impl CartridgeHeader {
             _ => return Err(anyhow!("CartridgeHeader: unknown RAM size")),
         };
 
+        let mbc: Box<dyn Mbc> = match cartridge_type {
+            Mapper::RomOnly => Box::new(RomOnly::try_from(rom.clone())?),
+            Mapper::Mbc1 => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, false)),
+            Mapper::Mbc1Ram => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, false)),
+            Mapper::Mbc1RamBattery => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, true)),
+            m => todo!("mmu: unimplemented mapper: {m:?}"),
+        };
+
         let header = CartridgeHeader {
             title,
             cartridge_type,
             rom_banks,
             ram_banks,
+            mbc,
         };
         log::info!("CartridgeHeader: new: {header:?}");
         Ok(header)
@@ -79,6 +92,8 @@ impl CartridgeHeader {
 pub enum Mapper {
     RomOnly = 0x00,
     Mbc1 = 0x01,
+    Mbc1Ram = 0x02,
+    Mbc1RamBattery = 0x03,
     Mbc3TimerRamBattery = 0x10,
     Mbc3RamBattery = 0x13,
 }
@@ -90,6 +105,8 @@ impl TryFrom<u8> for Mapper {
         match value {
             0x00 => Ok(Mapper::RomOnly),
             0x01 => Ok(Mapper::Mbc1),
+            0x02 => Ok(Mapper::Mbc1Ram),
+            0x03 => Ok(Mapper::Mbc1RamBattery),
             0x10 => Ok(Mapper::Mbc3TimerRamBattery),
             0x13 => Ok(Mapper::Mbc3RamBattery),
             _ => Err(anyhow!("unknown mapper: 0x{value:02x?}")),

@@ -2,7 +2,10 @@ use std::ops::DerefMut;
 
 use anyhow::anyhow;
 
-use crate::core::{Buttons, CartridgeHeader, Mapper, Mode};
+use crate::core::{
+    Buttons, CartridgeHeader, Mapper, Mode,
+    mbc::{Mbc, rom_only::RomOnly},
+};
 
 // const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
@@ -34,11 +37,7 @@ pub struct IoRegisters {
 #[derive(Debug)]
 pub struct Mmu {
     pub ie: u8,
-    rom_banks: Vec<Vec<u8>>,
-    rom_bank: usize,
     vram: Vec<u8>,
-    exram: Vec<Vec<u8>>,
-    ram_bank: usize,
     wram: Vec<u8>,
     oam: Vec<u8>,
     hram: Vec<u8>,
@@ -46,42 +45,28 @@ pub struct Mmu {
     pub dma_requsted: bool,
     pub buttons: Buttons,
     pub ppu_mode: Mode,
-    pub header: CartridgeHeader,
+    pub cartridge: CartridgeHeader,
 }
 
 impl Mmu {
     pub fn new(rom: Vec<u8>) -> anyhow::Result<Self> {
-        let mut rom_banks = Vec::new();
-        for i in 0..rom.len() / 0x4000 {
-            rom_banks.push(rom[(i * 0x4000)..((i + 1) * 0x4000)].to_vec());
-        }
-        log::debug!("mmu: new: {} rom banks", rom_banks.len());
-        for (i, ele) in rom_banks.iter().enumerate() {
-            log::debug!("{}: {:02x?}", i, &ele[0..0x10]);
-        }
-
         let io = IoRegisters {
             ..Default::default()
         };
 
-        let header = CartridgeHeader::new(rom)?;
-        let exram = vec![vec![0; 0x2000]; header.ram_banks];
+        let header = CartridgeHeader::new(&rom)?;
 
         let mmu = Self {
             io,
             ie: 0,
-            rom_banks,
-            rom_bank: 1,
             vram: vec![0; 0x2000],
-            exram,
-            ram_bank: 0,
             wram: vec![0; 0x2000],
             oam: vec![0; 0x100],
             hram: vec![0; 0x7f],
             dma_requsted: false,
             buttons: Default::default(),
             ppu_mode: Mode::OamScan,
-            header,
+            cartridge: header,
         };
         Ok(mmu)
     }
@@ -90,16 +75,14 @@ impl Mmu {
         log::trace!("read: reading {addr:x?}");
         let a = addr as usize;
         match a {
-            0x0..=0x3fff => {
+            0x0..=0x7fff | 0xa000..=0xbfff => {
                 if (0x0..=0xff).contains(&a) && self.io.bank == 0 {
                     Ok(BOOT[a])
                 } else {
-                    Ok(self.rom_banks[0][a])
+                    Ok(self.cartridge.mbc.read(addr)?)
                 }
             }
-            0x4000..=0x7fff => Ok(self.rom_banks[self.rom_bank][a - 0x4000]),
             0x8000..=0x9fff => Ok(self.vram[a - 0x8000]),
-            0xa000..=0xbfff => Ok(self.exram[self.ram_bank][a - 0xa000]),
             0xc000..=0xdfff => Ok(self.wram[a - 0xc000]),
             0xe000..=0xfdff => self.read(addr - 0x2000), // echo ram
             0xfe00..=0xfe9f => Ok(self.oam[a - 0xfe00]),
@@ -189,62 +172,9 @@ impl Mmu {
         log::trace!("write: writing {val:x?} to {addr:x?}");
         let a = addr as usize;
         match a {
-            0x0..=0x7fff => match self.header.cartridge_type {
-                Mapper::Mbc1 => match a {
-                    0x2000..=0x3fff => {
-                        // rom bank
-                        // TODO: specific mapping behavior
-                        // https://gbdev.io/pandocs/MBC1.html#20003fff--rom-bank-number-write-only
-
-                        self.rom_bank = (val & 0b00011111) as usize;
-                        if (self.rom_bank % 0x10) == 0 {
-                            self.rom_bank += 1;
-                        }
-                        log::debug!("write: switching bank: 0x{:02x?}", self.rom_bank);
-                        Ok(())
-                    }
-                    0x4000..=0x5fff => {
-                        // upper ram bank
-                        todo!()
-                    }
-                    0x6000..=0x7fff => {
-                        // banking mode select
-                        todo!()
-                    }
-                    _ => Ok(()),
-                },
-                Mapper::Mbc3RamBattery | Mapper::Mbc3TimerRamBattery => match a {
-                    0x2000..=0x3fff => {
-                        // rom bank
-                        self.rom_bank = (val & 0b01111111) as usize;
-                        if self.rom_bank == 0 {
-                            self.rom_bank = 1;
-                        }
-                        log::debug!("write: switching bank: 0x{:02x?}", self.rom_bank);
-                        Ok(())
-                    }
-                    // RAM/RTC select
-                    0x4000..=0x5fff => match val {
-                        0x00..=0x07 => {
-                            self.ram_bank = val as usize;
-                            Ok(())
-                        }
-                        0x08..=0x0c => {
-                            // TODO: RTC
-                            Ok(())
-                        }
-                        _ => Ok(()),
-                    },
-                    _ => Ok(()),
-                },
-                _ => Ok(()),
-            },
+            0x0..=0x7fff | 0xa000..=0xbfff => Ok(self.cartridge.mbc.write(addr, val)?),
             0x8000..=0x9fff => {
                 self.vram[a - 0x8000] = val;
-                Ok(())
-            }
-            0xa000..=0xbfff => {
-                self.exram[self.ram_bank][a - 0xa000] = val;
                 Ok(())
             }
             0xc000..=0xdfff => {
