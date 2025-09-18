@@ -1,10 +1,8 @@
-use std::ops::DerefMut;
-
 use anyhow::anyhow;
 
 use crate::core::{
-    Buttons, CartridgeHeader, Mapper, Mode,
-    mbc::{Mbc, rom_only::RomOnly},
+    Buttons, Mode,
+    mbc::{CartridgeHeader, Mbc, rom_only::RomOnly},
 };
 
 // const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");

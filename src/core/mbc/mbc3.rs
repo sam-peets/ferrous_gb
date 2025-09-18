@@ -87,7 +87,6 @@ impl Mbc for Mbc3 {
                 Ok(())
             }
             0xa000..=0xbfff => {
-                // TODO: rtc
                 if self.ram_enable {
                     match self.ram_bank {
                         0x0..=0x07 => {
