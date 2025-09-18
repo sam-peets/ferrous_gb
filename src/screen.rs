@@ -47,9 +47,13 @@ impl Screen {
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
         for _ in 0..70224 {
             // is this right?
-            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
             self.cpu.cycle()?;
+            self.cpu.apu.clock(&mut self.cpu.mmu)?;
+            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
+
             self.cpu.mmu.sys = self.cpu.mmu.sys.wrapping_add(1);
+            // TODO: add a way to look at falling edges on sys/div
+            // off the top of my head, APU needs it, timer needs it...
         }
         let f = self
             .cpu

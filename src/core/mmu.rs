@@ -2,6 +2,7 @@ use anyhow::anyhow;
 
 use crate::core::{
     Buttons, Mode,
+    apu::{Apu, ApuRegisters},
     mbc::{CartridgeHeader, Mbc, rom_only::RomOnly},
 };
 
@@ -44,6 +45,7 @@ pub struct Mmu {
     pub ppu_mode: Mode,
     pub cartridge: CartridgeHeader,
     pub sys: u16,
+    pub apu: ApuRegisters,
 }
 
 impl Mmu {
@@ -66,6 +68,7 @@ impl Mmu {
             ppu_mode: Mode::OamScan,
             cartridge: header,
             sys: 0,
+            apu: Default::default(),
         };
         Ok(mmu)
     }
@@ -132,6 +135,9 @@ impl Mmu {
                 0xff06 => Ok(self.io.tma),
                 0xff07 => Ok(self.io.tac),
                 0xff0f => Ok(self.io.interrupt),
+                0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
+                    self.apu.read(addr)
+                }
                 0xff40 => Ok(self.io.lcdc),
                 0xff41 => {
                     let mut v = self.io.stat;
@@ -285,9 +291,8 @@ impl Mmu {
                     self.io.bank = val;
                     Ok(())
                 }
-                0xff10..=0xff3f => {
-                    log::trace!("FIXME: mmu: sound register write: {a:x?} {val:x?}");
-                    Ok(())
+                0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
+                    self.apu.write(addr, val)
                 }
 
                 _ => {
