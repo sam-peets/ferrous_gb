@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use cpal::{
     FromSample, SizedSample, Stream,
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -8,16 +10,28 @@ use crate::core::{Buttons, cpu::Cpu};
 
 pub struct Screen {
     pub cpu: Cpu,
-    pub texture: TextureHandle,
+    pub screen_texture: TextureHandle,
+    pub vram_texture: TextureHandle,
     pub last_frame: u128,
     pub handle: Option<Handle>,
 }
 
 impl Screen {
-    pub fn new(cpu: Cpu, texture: egui::TextureHandle) -> Self {
+    pub fn new(cpu: Cpu, ctx: &egui::Context) -> Self {
+        let screen_texture = ctx.load_texture(
+            "screen",
+            egui::ColorImage::filled([160, 144], Color32::BLACK),
+            egui::TextureOptions::NEAREST,
+        );
+        let vram_texture = ctx.load_texture(
+            "vram_debug",
+            egui::ColorImage::filled([128, 64 * 4], Color32::BLACK),
+            egui::TextureOptions::NEAREST,
+        );
         Screen {
             cpu,
-            texture,
+            screen_texture,
+            vram_texture,
             last_frame: 0,
             handle: None,
         }
@@ -45,6 +59,23 @@ impl Screen {
             .collect();
         Ok(f)
     }
+
+    fn vram_debug_frame(&mut self) -> anyhow::Result<Vec<Color32>> {
+        let v = self.cpu.ppu.dump_vram(&mut self.cpu.mmu)?;
+        let f = v
+            .iter()
+            .map(|x| match x {
+                0 => Color32::from_hex("#e0f8d0").unwrap(),
+                1 => Color32::from_hex("#88c070").unwrap(),
+                2 => Color32::from_hex("#346856").unwrap(),
+                3 => Color32::from_hex("#081820").unwrap(),
+                _ => unreachable!(),
+            })
+            .collect();
+
+        Ok(f)
+    }
+
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         ui.ctx().request_repaint();
         let buttons = ui.input(|i| Buttons {
@@ -67,7 +98,7 @@ impl Screen {
                 panic!("error: {e}");
             }
         };
-        self.texture.set(
+        self.screen_texture.set(
             egui::ColorImage {
                 size: [160, 144],
                 source_size: Vec2::new(160.0, 144.0),
@@ -75,13 +106,25 @@ impl Screen {
             },
             egui::TextureOptions::NEAREST,
         );
-        let sized = egui::load::SizedTexture::from_handle(&self.texture);
+        let sized = egui::load::SizedTexture::from_handle(&self.screen_texture);
         let max_size = 2.0 * Vec2::new(160.0, 144.0);
         let min_size = ui.available_size();
         let target_size = min_size.min(max_size);
         ui.add(egui::Image::new(sized).fit_to_exact_size(target_size));
         ui.checkbox(&mut self.cpu.logging, "logging enabled");
         ui.label(format!("frame time: {}ms", self.last_frame));
+        ui.label(format!("lcdc: 0b{:08b}", self.cpu.mmu.io.lcdc));
+        let debug_frame = self.vram_debug_frame().unwrap();
+        self.vram_texture.set(
+            egui::ColorImage {
+                size: [128, 64 * 4],
+                source_size: Vec2::new(128.0, 64.0 * 4.0),
+                pixels: debug_frame,
+            },
+            egui::TextureOptions::NEAREST,
+        );
+        let sized = egui::load::SizedTexture::from_handle(&self.vram_texture);
+        ui.add(egui::Image::new(sized));
 
         if ui.button("audio test").clicked() {
             self.handle = Some(beep());

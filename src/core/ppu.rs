@@ -414,4 +414,31 @@ impl Ppu {
 
         Ok(())
     }
+
+    pub fn dump_vram(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
+        let mut out = vec![0; 32768];
+        let base = 0x8000;
+
+        for bank in 0..4 {
+            let bank_base = base + bank * 128 * 16;
+
+            for x in 0..16 {
+                for y in 0..8 {
+                    for line in 0..8 {
+                        let screen_base = bank * 128 * 64 + (y * 8 + line) * 128 + x * 8;
+                        let vram_base = (x * y * 16) + line * 2;
+                        let b1 = mmu.read(bank_base + vram_base)?;
+                        let b2 = mmu.read(bank_base + vram_base + 1)?;
+                        for i in 0..=7 {
+                            let bit1 = bit(b1, 7 - i);
+                            let bit2 = bit(b2, 7 - i) << 1;
+                            out[(screen_base + i as u16) as usize] = bit1 | bit2;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(out)
+    }
 }
