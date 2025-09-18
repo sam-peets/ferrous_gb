@@ -29,58 +29,94 @@ pub struct ApuRegisters {
 }
 
 impl ApuRegisters {
+    fn clear_regs(&mut self) {
+        self.nr10 = 0;
+        self.nr11 = 0;
+        self.nr12 = 0;
+        self.nr13 = 0;
+        self.nr14 = 0;
+        self.nr21 = 0;
+        self.nr22 = 0;
+        self.nr23 = 0;
+        self.nr24 = 0;
+        self.nr30 = 0;
+        self.nr31 = 0;
+        self.nr32 = 0;
+        self.nr33 = 0;
+        self.nr34 = 0;
+        self.nr41 = 0;
+        self.nr42 = 0;
+        self.nr43 = 0;
+        self.nr44 = 0;
+        self.nr50 = 0;
+        self.nr51 = 0;
+    }
     pub fn write(&mut self, addr: u16, val: u8) -> anyhow::Result<()> {
-        match addr {
-            0xff10 => self.nr10 = val,
-            0xff11 => self.nr11 = val,
-            0xff12 => self.nr12 = val,
-            0xff13 => self.nr13 = val,
-            0xff14 => self.nr14 = val,
-            0xff16 => self.nr21 = val,
-            0xff17 => self.nr22 = val,
-            0xff18 => self.nr23 = val,
-            0xff19 => self.nr24 = val,
-            0xff1a => self.nr30 = val,
-            0xff1b => self.nr31 = val,
-            0xff1c => self.nr32 = val,
-            0xff1d => self.nr33 = val,
-            0xff1e => self.nr34 = val,
-            0xff20 => self.nr41 = val,
-            0xff21 => self.nr42 = val,
-            0xff22 => self.nr43 = val,
-            0xff23 => self.nr44 = val,
-            0xff24 => self.nr50 = val,
-            0xff25 => self.nr51 = val,
-            0xff26 => self.nr52 = val,
-            0xff30..=0xff3f => self.wave[(addr - 0xff30) as usize] = val,
-            _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
-        };
+        if (self.nr52 & 0b1000_0000) > 0 {
+            // audio is enabled
+            match addr {
+                0xff10 => self.nr10 = val,
+                0xff11 => self.nr11 = val,
+                0xff12 => self.nr12 = val,
+                0xff13 => self.nr13 = val,
+                0xff14 => self.nr14 = val,
+                0xff16 => self.nr21 = val,
+                0xff17 => self.nr22 = val,
+                0xff18 => self.nr23 = val,
+                0xff19 => self.nr24 = val,
+                0xff1a => self.nr30 = val,
+                0xff1b => self.nr31 = val,
+                0xff1c => self.nr32 = val,
+                0xff1d => self.nr33 = val,
+                0xff1e => self.nr34 = val,
+                0xff20 => self.nr41 = val,
+                0xff21 => self.nr42 = val,
+                0xff22 => self.nr43 = val,
+                0xff23 => self.nr44 = val,
+                0xff24 => self.nr50 = val,
+                0xff25 => self.nr51 = val,
+                0xff26 => {
+                    self.nr52 = val & 0b1000_0000;
+                    if (self.nr52 & 0b1000_0000) == 0 {
+                        self.clear_regs();
+                    }
+                }
+                0xff30..=0xff3f => self.wave[(addr - 0xff30) as usize] = val,
+                _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
+            };
+        } else {
+            match addr {
+                0xff26 => self.nr52 = val & 0b1000_0000,
+                0xff30..=0xff3f => self.wave[(addr - 0xff30) as usize] = val,
+                _ => {} // writes are discarded if apu is off
+            }
+        }
 
         Ok(())
     }
     pub fn read(&self, addr: u16) -> anyhow::Result<u8> {
         let v = match addr {
-            0xff10 => self.nr10 & 0b0111_1111,
-            0xff11 => self.nr11 & 0b1100_0000,
+            0xff10 => self.nr10 | 0x80,
+            0xff11 => self.nr11 | 0x3f,
             0xff12 => self.nr12,
-            0xff13 => 0b0000_0000,
-            0xff14 => self.nr14 & 0b0100_0000,
-            0xff16 => self.nr21 & 0b1100_0000,
+            0xff13 => 0xff,
+            0xff14 => self.nr14 | 0xbf,
+            0xff16 => self.nr21 | 0x3f,
             0xff17 => self.nr22,
-            0xff18 => 0b0000_0000,
-            0xff19 => self.nr24 & 0b0100_0000,
-            0xff1a => self.nr30 & 0b1000_0000,
-            0xff1b => 0b0000_0000,
-            0xff1c => self.nr32 & 0b0110_0000,
-            0xff1d => 0b0000_0000,
-            0xff1e => self.nr34 & 0b0100_0000,
-            0xff20 => 0b0000_0000,
+            0xff18 => 0xff,
+            0xff19 => self.nr24 | 0xbf,
+            0xff1a => self.nr30 | 0x7f,
+            0xff1b => 0xff,
+            0xff1c => self.nr32 | 0x9f,
+            0xff1d => 0xff,
+            0xff1e => self.nr34 | 0xbf,
+            0xff20 => 0xff,
             0xff21 => self.nr42,
             0xff22 => self.nr43,
-            0xff23 => self.nr44 & 0b0100_0000,
+            0xff23 => self.nr44 | 0xbf,
             0xff24 => self.nr50,
             0xff25 => self.nr51,
-            0xff26 => self.nr52 & 0b1000_1111,
+            0xff26 => self.nr52 | 0x70,
             0xff30..=0xff3f => self.wave[(addr - 0xff30) as usize],
             _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
         };
@@ -91,6 +127,7 @@ impl ApuRegisters {
 
 #[derive(Debug, Default)]
 pub struct Apu {
+    pub registers: ApuRegisters,
     div_apu: u8,
     ch1_enabled: bool,
     ch2_enabled: bool,
@@ -102,12 +139,12 @@ impl Apu {
         Default::default()
     }
 
-    fn clock_ch1(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
+    fn clock_ch1(&mut self) {
         // sweep
-        let pace = (mmu.apu.nr10 & 0b0111_0000) >> 4;
-        let direction = (mmu.apu.nr10 & 0b0000_1000) >> 4;
-        let individual_step = (mmu.apu.nr10 & 0b0000_0111) >> 4;
-        let lt = (((mmu.apu.nr14 as u16) & 0b0000_0111) << 8) | mmu.apu.nr13 as u16;
+        let pace = (self.registers.nr10 & 0b0111_0000) >> 4;
+        let direction = (self.registers.nr10 & 0b0000_1000) >> 4;
+        let individual_step = (self.registers.nr10 & 0b0000_0111) >> 4;
+        let lt = (((self.registers.nr14 as u16) & 0b0000_0111) << 8) | self.registers.nr13 as u16;
         let step = 2u8.pow(individual_step as u32);
         let d_lt = lt / step as u16;
         let lt_next = if direction == 0 { lt + d_lt } else { lt - d_lt };
@@ -116,26 +153,28 @@ impl Apu {
             // pandocs: this happens when pace is 0 as well
 
             // TODO: turn off the channel
+            self.ch1_enabled = false;
         } else if pace != 0 && (self.div_apu % (pace * 4) == 0) {
             let lt_next_high = ((lt_next & 0xff00) >> 8) as u8;
             let lt_next_low = (lt_next & 0x00ff) as u8;
-            mmu.apu.nr13 = lt_next_low;
-            mmu.apu.nr14 = (mmu.apu.nr14 & 0b1111_1000) | lt_next_high;
+            self.registers.nr13 = lt_next_low;
+            self.registers.nr14 = (self.registers.nr14 & 0b1111_1000) | lt_next_high;
         }
-
-        Ok(())
     }
 
-    pub fn clock(&mut self, mmu: &mut Mmu) -> anyhow::Result<()> {
-        let div = mmu.read(0xff04)?;
+    pub fn clock(&mut self, div: u8) {
         // TODO: check the falling edge instead of mod
         if (div % 0b0010_0000) != 0 {
-            return Ok(());
+            return;
+        }
+        if (self.registers.nr52 & 0b1000_0000) == 0 {
+            // apu is disabled, don't do anything
+            return;
         }
 
-        self.clock_ch1(mmu)?;
+        self.clock_ch1();
 
-        mmu.apu.nr52 = (mmu.apu.nr52 & 0b1111_0000) | {
+        self.registers.nr52 = (self.registers.nr52 & 0b1111_0000) | {
             let mut enabled = 0;
             if self.ch1_enabled {
                 enabled |= 0b1
@@ -152,6 +191,5 @@ impl Apu {
             enabled
         };
         self.div_apu = self.div_apu.wrapping_add(1);
-        Ok(())
     }
 }

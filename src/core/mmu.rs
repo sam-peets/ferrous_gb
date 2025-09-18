@@ -45,7 +45,7 @@ pub struct Mmu {
     pub ppu_mode: Mode,
     pub cartridge: CartridgeHeader,
     pub sys: u16,
-    pub apu: ApuRegisters,
+    pub apu: Apu,
 }
 
 impl Mmu {
@@ -136,7 +136,7 @@ impl Mmu {
                 0xff07 => Ok(self.io.tac),
                 0xff0f => Ok(self.io.interrupt),
                 0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
-                    self.apu.read(addr)
+                    self.apu.registers.read(addr)
                 }
                 0xff40 => Ok(self.io.lcdc),
                 0xff41 => {
@@ -292,7 +292,7 @@ impl Mmu {
                     Ok(())
                 }
                 0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
-                    self.apu.write(addr, val)
+                    self.apu.registers.write(addr, val)
                 }
 
                 _ => {

@@ -48,7 +48,8 @@ impl Screen {
         for _ in 0..70224 {
             // is this right?
             self.cpu.cycle()?;
-            self.cpu.apu.clock(&mut self.cpu.mmu)?;
+            let div = self.cpu.mmu.read(0xff04)?;
+            self.cpu.mmu.apu.clock(div);
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
 
             self.cpu.mmu.sys = self.cpu.mmu.sys.wrapping_add(1);
