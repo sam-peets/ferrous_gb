@@ -45,12 +45,11 @@ impl Screen {
     }
 
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
-        let mut sys = 0u16;
-        for i in 0..70224 {
+        for _ in 0..70224 {
             // is this right?
             self.cpu.ppu.clock(&mut self.cpu.mmu)?;
-            self.cpu.cycle(sys)?;
-            sys = sys.overflowing_add(1).0;
+            self.cpu.cycle()?;
+            self.cpu.mmu.sys = self.cpu.mmu.sys.wrapping_add(1);
         }
         let f = self
             .cpu

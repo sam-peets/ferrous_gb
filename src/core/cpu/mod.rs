@@ -48,6 +48,7 @@ impl Cpu {
         cpu.registers.pc.write(0x0100);
         cpu.registers.sp.write(0xfffe);
         cpu.mmu.io.bank = 0xff;
+        cpu.mmu.sys = 0xabcc;
         Ok(cpu)
     }
 
@@ -65,25 +66,24 @@ impl Cpu {
         Ok(())
     }
 
-    pub fn cycle(&mut self, sys: u16) -> anyhow::Result<()> {
-        self.mmu.io.div = ((sys & 0xff00) >> 8) as u8;
-        if sys % 4 != 0 {
+    pub fn cycle(&mut self) -> anyhow::Result<()> {
+        if self.mmu.sys % 4 != 0 {
             // only clock the cpu on an m-cycle
             return Ok(());
         }
-        // if self.logging {
-        //     println!(
-        //         "SYS: {} IME: {} IE: {:x?} IF: {:x?} TIMA: {:x?} TAC: {:x?} TMA: {:x?} DIV: {:x?}",
-        //         sys,
-        //         self.ime,
-        //         self.mmu.ie,
-        //         self.mmu.io.interrupt,
-        //         self.mmu.io.tima,
-        //         self.mmu.io.tac,
-        //         self.mmu.io.tma,
-        //         self.mmu.io.div,
-        //     );
-        // }
+        if self.logging {
+            println!(
+                "SYS: {} IME: {} IE: {:x?} IF: {:x?} TIMA: {:x?} TAC: {:x?} TMA: {:x?} DIV: {:x?}",
+                self.mmu.sys,
+                self.ime,
+                self.mmu.ie,
+                self.mmu.io.interrupt,
+                self.mmu.io.tima,
+                self.mmu.io.tac,
+                self.mmu.io.tma,
+                self.mmu.read(0xff04)?,
+            );
+        }
         if self.timer_overflow {
             // should be delayed by one m-cycle
             self.mmu.io.interrupt |= 0b00000100;
@@ -93,14 +93,14 @@ impl Cpu {
         if (self.mmu.io.tac & 0b00000100) > 0 {
             // timer is enabled, tick it
             let interval = match self.mmu.io.tac & 0b0000_0011 {
-                0b00 => 256,
-                0b01 => 4,
-                0b10 => 16,
-                0b11 => 64,
+                0b00 => 1024,
+                0b01 => 16,
+                0b10 => 64,
+                0b11 => 256,
                 _ => unreachable!(),
-            } * 4;
+            };
 
-            if sys % interval == 0 {
+            if self.mmu.sys % interval == 0 {
                 let (val, overflow) = self.mmu.io.tima.overflowing_add(1);
                 self.mmu.io.tima = val;
                 if overflow {

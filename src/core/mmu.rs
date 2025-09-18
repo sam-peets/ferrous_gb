@@ -12,7 +12,6 @@ const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
 pub struct IoRegisters {
     pub joyp: u8,      // 0xff00
     pub sc: u8,        // 0xff02
-    pub div: u8,       // 0xff04
     pub tima: u8,      // 0xff05
     pub tma: u8,       // 0xff06
     pub tac: u8,       // 0xff07
@@ -44,6 +43,7 @@ pub struct Mmu {
     pub buttons: Buttons,
     pub ppu_mode: Mode,
     pub cartridge: CartridgeHeader,
+    pub sys: u16,
 }
 
 impl Mmu {
@@ -65,6 +65,7 @@ impl Mmu {
             buttons: Default::default(),
             ppu_mode: Mode::OamScan,
             cartridge: header,
+            sys: 0,
         };
         Ok(mmu)
     }
@@ -126,7 +127,7 @@ impl Mmu {
                     }
                 }
                 0xff02 => Ok(self.io.sc),
-                0xff04 => Ok(self.io.div),
+                0xff04 => Ok(((self.sys & 0xff00) >> 8) as u8),
                 0xff05 => Ok(self.io.tima),
                 0xff06 => Ok(self.io.tma),
                 0xff07 => Ok(self.io.tac),
@@ -203,8 +204,8 @@ impl Mmu {
                     Ok(())
                 }
                 0xff04 => {
-                    // any write resets the divider to 0
-                    self.io.div = 0;
+                    // any write resets the divider/system clock to 0
+                    self.sys = 0;
                     Ok(())
                 }
                 0xff05 => {

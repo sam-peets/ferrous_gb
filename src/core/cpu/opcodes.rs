@@ -155,6 +155,7 @@ impl Cpu {
             .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
         self.registers.pc.write(addr);
         self.registers.sp -= 2;
+        self.delay += 6;
         log::trace!("call_u16: calling subroutine 0x{addr:x?}");
         Ok(())
     }
@@ -552,6 +553,7 @@ impl Cpu {
             .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
         self.registers.pc.write(addr);
         self.registers.sp -= 2;
+        self.delay += 6;
         log::trace!("call_cond_u16: calling subroutine 0x{addr:x?}");
         Ok(())
     }
@@ -1471,7 +1473,7 @@ impl Cpu {
         let val = target & !(1 << bit);
         self.mmu.write(self.registers.hl.read(), val)?;
         self.registers.pc += 2;
-        self.delay += 3;
+        self.delay += 4;
         Ok(())
     }
 
