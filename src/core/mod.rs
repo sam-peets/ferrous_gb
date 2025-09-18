@@ -2,6 +2,7 @@ use anyhow::anyhow;
 
 use crate::core::mbc::{Mbc, mbc1::Mbc1, mbc3::Mbc3, rom_only::RomOnly};
 
+pub mod apu;
 pub mod cpu;
 pub mod mbc;
 pub mod mmu;

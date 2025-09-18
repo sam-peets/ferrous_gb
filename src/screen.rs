@@ -8,12 +8,18 @@ use egui::{Color32, Key, TextureHandle, Vec2, Widget};
 
 use crate::core::{Buttons, cpu::Cpu};
 
+#[derive(Default)]
+pub struct Debugger {
+    pub show_vram: bool,
+}
+
 pub struct Screen {
     pub cpu: Cpu,
     pub screen_texture: TextureHandle,
     pub vram_texture: TextureHandle,
     pub last_frame: u128,
     pub handle: Option<Handle>,
+    pub debugger: Debugger,
 }
 
 impl Screen {
@@ -34,8 +40,10 @@ impl Screen {
             vram_texture,
             last_frame: 0,
             handle: None,
+            debugger: Debugger::default(),
         }
     }
+
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
         let mut sys = 0u16;
         for i in 0..70224 {
@@ -114,17 +122,22 @@ impl Screen {
         ui.checkbox(&mut self.cpu.logging, "logging enabled");
         ui.label(format!("frame time: {}ms", self.last_frame));
         ui.label(format!("lcdc: 0b{:08b}", self.cpu.mmu.io.lcdc));
-        let debug_frame = self.vram_debug_frame().unwrap();
-        self.vram_texture.set(
-            egui::ColorImage {
-                size: [128, 64 * 4],
-                source_size: Vec2::new(128.0, 64.0 * 4.0),
-                pixels: debug_frame,
-            },
-            egui::TextureOptions::NEAREST,
-        );
-        let sized = egui::load::SizedTexture::from_handle(&self.vram_texture);
-        ui.add(egui::Image::new(sized));
+
+        if self.debugger.show_vram {
+            egui::Window::new("VRAM").show(ui.ctx(), |ui| {
+                let debug_frame = self.vram_debug_frame().unwrap();
+                self.vram_texture.set(
+                    egui::ColorImage {
+                        size: [128, 64 * 4],
+                        source_size: Vec2::new(128.0, 64.0 * 4.0),
+                        pixels: debug_frame,
+                    },
+                    egui::TextureOptions::NEAREST,
+                );
+                let sized = egui::load::SizedTexture::from_handle(&self.vram_texture);
+                ui.add(egui::Image::new(sized));
+            });
+        }
 
         if ui.button("audio test").clicked() {
             self.handle = Some(beep());
