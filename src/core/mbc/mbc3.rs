@@ -44,23 +44,31 @@ impl Mbc for Mbc3 {
         let ram_bank = self.ram_bank as usize;
         match addr {
             0x0000..=0x3fff => Ok(self.rom[0][addr]),
-            0x4000..=0x7fff => Ok(self.rom[rom_bank % self.rom_banks][addr - 0x4000]),
-            0xa000..=0xbfff => match self.ram_bank {
-                0x0..=0x07 => {
-                    // ram banks
-                    Ok(self.ram[ram_bank % self.ram_banks][addr - 0xa000])
-                }
-                0x08..=0x0c => {
-                    // TODO: rtc banks
+            0x4000..=0x7fff => Ok(self.rom[rom_bank][addr - 0x4000]),
+            0xa000..=0xbfff => {
+                if self.ram_enable {
+                    match self.ram_bank {
+                        0x0..=0x07 => {
+                            // ram banks
+                            Ok(self.ram[ram_bank][addr - 0xa000])
+                        }
+                        0x08..=0x0c => {
+                            // TODO: rtc banks
+                            Ok(0xff)
+                        }
+                        _ => Err(anyhow!("Mbc3: bad ram bank: 0x{ram_bank:02x?}")),
+                    }
+                } else {
                     Ok(0xff)
                 }
-                _ => Err(anyhow!("Mbc3: bad ram bank: 0x{ram_bank:02x?}")),
-            },
+            }
             _ => Err(anyhow!("Mbc3: invalid read: 0x{addr:04x?}")),
         }
     }
 
     fn write(&mut self, addr: u16, val: u8) -> anyhow::Result<()> {
+        let addr = addr as usize;
+        let ram_bank = self.ram_bank as usize;
         match addr {
             0x0000..=0x1fff => {
                 self.ram_enable = (val & 0x0f) == 0x0a;
@@ -80,6 +88,18 @@ impl Mbc for Mbc3 {
             }
             0xa000..=0xbfff => {
                 // TODO: rtc
+                if self.ram_enable {
+                    match self.ram_bank {
+                        0x0..=0x07 => {
+                            // ram banks
+                            self.ram[ram_bank][addr - 0xa000] = val;
+                        }
+                        0x08..=0x0c => {
+                            // TODO: rtc banks
+                        }
+                        _ => return Err(anyhow!("Mbc3: bad ram bank: 0x{ram_bank:02x?}")),
+                    }
+                }
                 Ok(())
             }
             _ => Err(anyhow!("Mbc3: invalid write: 0x{addr:04x?}")),

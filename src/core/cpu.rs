@@ -69,19 +69,19 @@ impl Cpu {
             // only clock the cpu on an m-cycle
             return Ok(());
         }
-        if self.logging {
-            println!(
-                "SYS: {} IME: {} IE: {:x?} IF: {:x?} TIMA: {:x?} TAC: {:x?} TMA: {:x?} DIV: {:x?}",
-                sys,
-                self.ime,
-                self.mmu.ie,
-                self.mmu.io.interrupt,
-                self.mmu.io.tima,
-                self.mmu.io.tac,
-                self.mmu.io.tma,
-                self.mmu.io.div,
-            );
-        }
+        // if self.logging {
+        //     println!(
+        //         "SYS: {} IME: {} IE: {:x?} IF: {:x?} TIMA: {:x?} TAC: {:x?} TMA: {:x?} DIV: {:x?}",
+        //         sys,
+        //         self.ime,
+        //         self.mmu.ie,
+        //         self.mmu.io.interrupt,
+        //         self.mmu.io.tima,
+        //         self.mmu.io.tac,
+        //         self.mmu.io.tma,
+        //         self.mmu.io.div,
+        //     );
+        // }
         if self.timer_overflow {
             // should be delayed by one m-cycle
             self.mmu.io.interrupt |= 0b00000100;

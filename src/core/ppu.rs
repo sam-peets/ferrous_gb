@@ -420,19 +420,19 @@ impl Ppu {
         let base = 0x8000;
 
         for bank in 0..4 {
-            let bank_base = base + bank * 128 * 16;
+            let bank_base = base + bank * 16 * 8 * 16;
 
-            for x in 0..16 {
-                for y in 0..8 {
-                    for line in 0..8 {
-                        let screen_base = bank * 128 * 64 + (y * 8 + line) * 128 + x * 8;
-                        let vram_base = (x * y * 16) + line * 2;
+            for tile_x in 0..16 {
+                for tile_y in 0..8 {
+                    for y in 0..8 {
+                        let screen_base = bank * 16 * 8 * 64 + (tile_y * 8 + y) * 128 + tile_x * 8;
+                        let vram_base = (tile_y * 16 * 16) + (tile_x * 16) + y * 2;
                         let b1 = mmu.read(bank_base + vram_base)?;
                         let b2 = mmu.read(bank_base + vram_base + 1)?;
-                        for i in 0..=7 {
-                            let bit1 = bit(b1, 7 - i);
-                            let bit2 = bit(b2, 7 - i) << 1;
-                            out[(screen_base + i as u16) as usize] = bit1 | bit2;
+                        for x in 0..=7 {
+                            let bit1 = bit(b1, 7 - x);
+                            let bit2 = bit(b2, 7 - x) << 1;
+                            out[(screen_base + x as u16) as usize] = bit1 | bit2;
                         }
                     }
                 }

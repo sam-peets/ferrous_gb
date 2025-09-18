@@ -26,7 +26,7 @@ impl eframe::App for TemplateApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Some(promise) = &self.promise {
             if let Some(Some(rom)) = promise.ready() {
-                self.screen = Some(Screen::new(Cpu::new(rom.clone()).unwrap(), ctx));
+                self.screen = Some(Screen::new(Cpu::new_fastboot(rom.clone()).unwrap(), ctx));
                 self.promise = None;
             }
         }
