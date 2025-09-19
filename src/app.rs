@@ -1,12 +1,6 @@
-use std::collections::BTreeMap;
-
-use egui::{Color32, FontData, FontDefinitions, FontFamily, TextureHandle, Widget};
 use poll_promise::Promise;
 
-use crate::{
-    core::cpu::Cpu,
-    screen::{self, Screen},
-};
+use crate::{core::cpu::Cpu, screen::Screen};
 
 pub struct TemplateApp {
     promise: Option<Promise<Option<Vec<u8>>>>,
@@ -14,7 +8,7 @@ pub struct TemplateApp {
 }
 
 impl TemplateApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(_: &eframe::CreationContext<'_>) -> Self {
         TemplateApp {
             promise: None,
             screen: None,

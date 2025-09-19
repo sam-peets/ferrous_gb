@@ -10,7 +10,6 @@ struct Object {
     x: u8,
     tile: u8,
     attributes: u8,
-    height: u8,
 }
 
 #[derive(Debug)]
@@ -78,7 +77,6 @@ impl Ppu {
     }
 
     fn draw_bg(&mut self, mmu: &mut Mmu) -> anyhow::Result<u8> {
-        let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
         let bg_tilemap_base = if (mmu.io.lcdc & 0b00001000) > 0 {
             0x9c00
         } else {
@@ -109,19 +107,11 @@ impl Ppu {
         let b2 = mmu.read(tile_row + 1)?;
         let b2 = bit(b2, 7 - tile_col_d);
         let color = (b2 << 1) | b1;
-        // self.screen[screen_idx] = match color {
-        //     0b00 => mmu.io.bgp & 0b00000011,
-        //     0b01 => (mmu.io.bgp & 0b00001100) >> 2,
-        //     0b10 => (mmu.io.bgp & 0b00110000) >> 4,
-        //     0b11 => (mmu.io.bgp & 0b11000000) >> 6,
-        //     _ => unreachable!("ppu: draw_bg: invalid color {color:02x?}"),
-        // };
 
         Ok(color)
     }
 
     fn draw_window(&mut self, mmu: &mut Mmu) -> anyhow::Result<u8> {
-        let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
         let window_tilemap_base = if (mmu.io.lcdc & 0b0100_0000) > 0 {
             0x9c00
         } else {
@@ -152,20 +142,11 @@ impl Ppu {
         let b2 = mmu.read(tile_row + 1)?;
         let b2 = bit(b2, 7 - tile_col_d);
         let color = (b2 << 1) | b1;
-        // self.screen[screen_idx] = match color {
-        //     0b00 => mmu.io.bgp & 0b00000011,
-        //     0b01 => (mmu.io.bgp & 0b00001100) >> 2,
-        //     0b10 => (mmu.io.bgp & 0b00110000) >> 4,
-        //     0b11 => (mmu.io.bgp & 0b11000000) >> 6,
-        //     _ => unreachable!("ppu: draw_window: invalid color {color:02x?}"),
-        // };
 
         Ok(color)
     }
 
     fn draw_objects(&mut self, mmu: &mut Mmu) -> anyhow::Result<Option<(u8, bool, u8)>> {
-        // todo!()
-        let screen_idx = mmu.io.ly as usize * WIDTH + self.lx as usize;
         let vram_base = 0x8000_u16;
         let lx = self.lx + 8;
         let ly = mmu.io.ly + 16;
@@ -208,9 +189,7 @@ impl Ppu {
             let b2 = mmu.read(tile_row + 1)?;
             let b2 = bit(b2, 7 - dx);
             let color = (b2 << 1) | b1;
-            // if (obj.attributes & 0b10000000) > 0 && color != 0b00 {
-            //     continue;
-            // }
+
             if color == 0b00 {
                 continue;
             }
@@ -220,13 +199,6 @@ impl Ppu {
                 mmu.io.obp0
             };
 
-            // self.screen[screen_idx] = match color {
-            //     0b00 => palette & 0b00000011,
-            //     0b01 => (palette & 0b00001100) >> 2,
-            //     0b10 => (palette & 0b00110000) >> 4,
-            //     0b11 => (palette & 0b11000000) >> 6,
-            //     _ => unreachable!("ppu: draw_objects: invalid color {color:02x?}"),
-            // };
             return Ok(Some((color, (obj.attributes & 0b1000_0000) > 0, palette)));
         }
         Ok(None)
@@ -293,7 +265,6 @@ impl Ppu {
                             x: mmu.read(OAM_BASE + i * 4 + 1)?,
                             tile: mmu.read(OAM_BASE + i * 4 + 2)?,
                             attributes: mmu.read(OAM_BASE + i * 4 + 3)?,
-                            height,
                         };
                         self.objects.push(obj);
                     }

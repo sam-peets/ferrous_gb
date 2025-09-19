@@ -3,7 +3,6 @@ pub mod register;
 use anyhow::anyhow;
 
 use crate::core::{
-    apu::Apu,
     cpu::register::{CpuRegisters, Register},
     mmu::Mmu,
     ppu::Ppu,
@@ -21,7 +20,6 @@ pub struct Cpu {
     pub halted: bool,
     pub dma_idx: u8,
     pub timer_overflow: bool,
-    pub apu: Apu,
 }
 
 impl Cpu {
@@ -37,7 +35,6 @@ impl Cpu {
             halted: false,
             dma_idx: 0,
             timer_overflow: true,
-            apu: Apu::new(),
         };
         Ok(cpu)
     }

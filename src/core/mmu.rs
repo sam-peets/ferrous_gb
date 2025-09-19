@@ -1,10 +1,6 @@
 use anyhow::anyhow;
 
-use crate::core::{
-    Buttons, Mode,
-    apu::{Apu, ApuRegisters},
-    mbc::{CartridgeHeader, Mbc, rom_only::RomOnly},
-};
+use crate::core::{Buttons, Mode, apu::Apu, mbc::CartridgeHeader};
 
 // const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");

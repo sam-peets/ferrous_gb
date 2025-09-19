@@ -1,7 +1,5 @@
 use anyhow::anyhow;
 
-use crate::core::mmu::Mmu;
-
 #[derive(Debug, Default)]
 pub struct ApuRegisters {
     nr10: u8,       // ch1 sweep
