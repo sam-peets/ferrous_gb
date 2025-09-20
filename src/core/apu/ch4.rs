@@ -21,15 +21,22 @@ pub struct Ch4 {
     pub enabled: bool,
     envelope: u8,
     volume: u8,
+    dac_enabled: bool,
 }
 
 impl Channel for Ch4 {
     fn clock(&mut self, div_apu: u8) {
-        if div_apu % 2 == 0 && self.length_enable && self.length > 0 {
+        if div_apu % 2 == 0 {
+            self.clock_length();
+        }
+    }
+    fn clock_length(&mut self) {
+        if self.length_enable && self.length > 0 {
             let new_length = self.length.wrapping_sub(1);
             if new_length == 0 {
                 self.enabled = false;
             }
+            log::debug!("ch4: clock length: {} -> {}", self.length, new_length);
             self.length = new_length;
         }
     }
@@ -61,32 +68,62 @@ impl Channel for Ch4 {
         }
     }
 
-    fn write(&mut self, addr: u16, val: u8) {
-        log::debug!("Ch2: write: {addr:04x?} = {val:02x?}");
+    fn write(&mut self, div_apu: u8, addr: u16, val: u8) {
+        // log::debug!("Ch4: write: {addr:04x?} = {val:02x?}");
         match addr {
+            // NR41
             0xff20 => {
                 self.length = 64 - extract(val, 0b0011_1111);
+                log::debug!("Ch4: write length: {}", self.length);
             }
+            // NR42
             0xff21 => {
                 self.initial_volume = extract(val, 0b1111_0000);
                 self.envelope_dir = extract(val, 0b0000_1000);
                 self.envelope_pace = extract(val, 0b0000_0111);
+                self.dac_enabled = (val & 0b1111_1000) > 0;
+                if !self.dac_enabled {
+                    self.enabled = false;
+                }
             }
+            // NR43
             0xff22 => {
                 self.clock_shift = extract(val, 0b1111_0000);
                 self.lfsr_width = extract(val, 0b0000_1000);
                 self.clock_divider = extract(val, 0b0000_0111);
             }
+            // NR44
             0xff23 => {
-                self.length_enable = (val & 0b0100_0000) > 0;
                 if (val & 0b1000_0000) > 0 {
                     self.enabled = true;
                     self.envelope = 0;
                     self.volume = self.initial_volume;
                     if self.length == 0 {
-                        self.length = 64;
+                        self.length = if div_apu % 2 == 0 { 63 } else { 64 };
                     }
                     // TODO: lfsr
+
+                    if !self.dac_enabled {
+                        self.enabled = false;
+                    }
+                }
+
+                let length_enable_old = self.length_enable;
+                self.length_enable = (val & 0b0100_0000) > 0;
+                log::debug!(
+                    "Ch4: extra clock cases: {} ({}) {} {} {}",
+                    div_apu,
+                    div_apu % 2,
+                    length_enable_old,
+                    self.length_enable,
+                    self.length
+                );
+                if ((div_apu % 2) == 0)
+                    && !length_enable_old
+                    && self.length_enable
+                    && self.length != 0
+                {
+                    self.clock_length();
                 }
             }
             _ => unreachable!(),

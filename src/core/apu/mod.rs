@@ -24,9 +24,10 @@ pub struct Apu {
 
 trait Channel {
     fn read(&self, addr: u16) -> u8;
-    fn write(&mut self, addr: u16, val: u8);
+    fn write(&mut self, div_apu: u8, addr: u16, val: u8);
     fn clock(&mut self, div_apu: u8);
     fn clear(&mut self);
+    fn clock_length(&mut self);
 }
 
 impl Apu {
@@ -39,14 +40,15 @@ impl Apu {
         self.nr50 = 0;
         self.nr51 = 0;
     }
-    pub fn write(&mut self, addr: u16, val: u8) -> anyhow::Result<()> {
+    pub fn write(&mut self, addr: u16, val: u8, sys: u16) -> anyhow::Result<()> {
+        log::debug!("Apu: write: [{sys:04x?}] {addr:04x?} = {val:02x?}");
         if self.enabled | matches!(addr, 0xff26 | 0xff30..=0xff3f) {
             // audio is enabled or writing to nr52/wave ram
             match addr {
-                0xff10..=0xff14 => self.ch1.write(addr, val),
-                0xff16..=0xff19 => self.ch2.write(addr, val),
-                0xff1a..=0xff1e => self.ch3.write(addr, val),
-                0xff20..=0xff23 => self.ch4.write(addr, val),
+                0xff10..=0xff14 => self.ch1.write(self.div_apu, addr, val),
+                0xff16..=0xff19 => self.ch2.write(self.div_apu, addr, val),
+                0xff1a..=0xff1e => self.ch3.write(self.div_apu, addr, val),
+                0xff20..=0xff23 => self.ch4.write(self.div_apu, addr, val),
                 0xff24 => self.nr50 = val,
                 0xff25 => self.nr51 = val,
                 0xff26 => {
@@ -63,7 +65,7 @@ impl Apu {
 
         Ok(())
     }
-    pub fn read(&self, addr: u16) -> anyhow::Result<u8> {
+    pub fn read(&self, addr: u16, sys: u16) -> anyhow::Result<u8> {
         let v = match addr {
             0xff10..=0xff14 => self.ch1.read(addr),
             0xff16..=0xff19 => self.ch2.read(addr),
@@ -94,6 +96,7 @@ impl Apu {
             0xff30..=0xff3f => self.wave[(addr - 0xff30) as usize],
             _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
         };
+        log::debug!("Apu: read: [{sys:04x?}] {addr:04x?} = {v:02x?}");
 
         Ok(v)
     }
@@ -109,6 +112,7 @@ impl Apu {
         if (sys % 0x2000) != 0 {
             return;
         }
+        log::debug!("Apu: clock! {sys:04x?}");
         if !self.enabled {
             // apu is disabled, don't do anything
             return;

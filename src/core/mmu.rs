@@ -132,7 +132,7 @@ impl Mmu {
                 0xff07 => Ok(self.io.tac),
                 0xff0f => Ok(self.io.interrupt),
                 0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
-                    self.apu.read(addr)
+                    self.apu.read(addr, self.sys)
                 }
                 0xff40 => Ok(self.io.lcdc),
                 0xff41 => {
@@ -288,7 +288,7 @@ impl Mmu {
                     Ok(())
                 }
                 0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
-                    self.apu.write(addr, val)
+                    self.apu.write(addr, val, self.sys)
                 }
 
                 _ => {
