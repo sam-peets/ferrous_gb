@@ -3,6 +3,7 @@ pub mod cpu;
 pub mod mbc;
 pub mod mmu;
 mod ppu;
+mod util;
 
 #[derive(Debug, Default)]
 pub struct Buttons {

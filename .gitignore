@@ -12,8 +12,8 @@ target_wasm
 # https://github.com/lycheeverse/lychee
 .lycheecache
 
-roms
-*.gb
+/roms
 *.pdf
 *.bin
+!bootix_dmg.bin
 *.log

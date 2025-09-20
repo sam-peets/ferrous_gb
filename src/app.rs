@@ -16,6 +16,8 @@ impl TemplateApp {
     }
 }
 
+const TOBU: &[u8] = include_bytes!("../assets/roms/tobu.gb");
+
 impl eframe::App for TemplateApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Some(promise) = &self.promise {
@@ -37,7 +39,12 @@ impl eframe::App for TemplateApp {
                             }
                         }));
                     }
-                    ui.menu_button("Load Example", |ui| {})
+                    ui.menu_button("Load Example", |ui| {
+                        if ui.button("Tobu Tobu Girl").clicked() {
+                            self.promise =
+                                Some(poll_promise::Promise::from_ready(Some(TOBU.to_vec())))
+                        }
+                    })
                 });
                 if let Some(screen) = &mut self.screen {
                     ui.menu_button("Debug", |ui| {

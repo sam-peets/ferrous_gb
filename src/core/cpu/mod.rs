@@ -182,7 +182,7 @@ impl Cpu {
         );
         if self.logging {
             println!(
-                "A: {:02X?} F: {:02X?} B: {:02X?} C: {:02X?} D: {:02X?} E: {:02X?} H: {:02X?} L: {:02X?} SP: {:04X?} PC: 00:{:04X?} ({:02X?} {:02X?} {:02X?} {:02X?})",
+                "A: {:02X?} F: {:02X?} B: {:02X?} C: {:02X?} D: {:02X?} E: {:02X?} H: {:02X?} L: {:02X?} SP: {:04X?} PC: 00:{:04X?} ({:02X?} {:02X?} {:02X?} {:02X?}) (HL): {:02X?}",
                 self.registers.af.high.read(),
                 self.registers.af.low.read(),
                 self.registers.bc.high.read(),
@@ -197,6 +197,7 @@ impl Cpu {
                 self.mmu.read(self.registers.pc.read() + 1)?,
                 self.mmu.read(self.registers.pc.read() + 2)?,
                 self.mmu.read(self.registers.pc.read() + 3)?,
+                self.mmu.read(self.registers.hl.read())?
             );
         }
 

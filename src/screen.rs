@@ -1,10 +1,8 @@
-use std::fmt::format;
-
 use cpal::{
     FromSample, SizedSample, Stream,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
-use egui::{Color32, Key, TextureHandle, Vec2, Widget};
+use egui::{Color32, Key, TextureHandle, Vec2};
 
 use crate::core::{Buttons, cpu::Cpu};
 

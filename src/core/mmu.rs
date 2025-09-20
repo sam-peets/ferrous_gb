@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use crate::core::{Buttons, Mode, apu::Apu, mbc::CartridgeHeader};
 
 // const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
-const BOOT: &[u8] = include_bytes!("../../bootix_dmg.bin");
+const BOOT: &[u8] = include_bytes!("../../assets/bootix_dmg.bin");
 
 #[derive(Default, Debug)]
 pub struct IoRegisters {
@@ -132,7 +132,7 @@ impl Mmu {
                 0xff07 => Ok(self.io.tac),
                 0xff0f => Ok(self.io.interrupt),
                 0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
-                    self.apu.registers.read(addr)
+                    self.apu.read(addr)
                 }
                 0xff40 => Ok(self.io.lcdc),
                 0xff41 => {
@@ -288,7 +288,7 @@ impl Mmu {
                     Ok(())
                 }
                 0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
-                    self.apu.registers.write(addr, val)
+                    self.apu.write(addr, val)
                 }
 
                 _ => {
