@@ -4,7 +4,7 @@ use crate::core::{apu::Channel, util::extract};
 pub struct Ch2 {
     // NR21
     duty: u8,
-    initial_length: u8,
+    length: u8,
 
     // NR22
     initial_volume: u8,
@@ -19,7 +19,6 @@ pub struct Ch2 {
 
     pub enabled: bool,
     envelope: u8,
-    length: u8,
     volume: u8,
 }
 
@@ -45,10 +44,11 @@ impl Channel for Ch2 {
         }
     }
     fn write(&mut self, addr: u16, val: u8) {
+        log::debug!("Ch2: write: {addr:04x?} = {val:02x?}");
         match addr {
             0xff16 => {
                 self.duty = extract(val, 0b1100_0000);
-                self.initial_length = extract(val, 0b0011_1111);
+                self.length = 64 - extract(val, 0b0011_1111);
             }
             0xff17 => {
                 self.initial_volume = extract(val, 0b1111_0000);
@@ -62,7 +62,9 @@ impl Channel for Ch2 {
                 if (val & 0b1000_0000) > 0 {
                     self.enabled = true;
                     self.envelope = 0;
-                    self.length = self.initial_length;
+                    if self.length == 0 {
+                        self.length = 64;
+                    }
                     self.volume = self.initial_volume;
                 }
 
@@ -73,8 +75,12 @@ impl Channel for Ch2 {
         }
     }
     fn clock(&mut self, div_apu: u8) {
-        if !self.enabled {
-            return;
+        if div_apu % 2 == 0 && self.length_enable && self.length > 0 {
+            let new_length = self.length.wrapping_sub(1);
+            if new_length == 0 {
+                self.enabled = false;
+            }
+            self.length = new_length;
         }
     }
 

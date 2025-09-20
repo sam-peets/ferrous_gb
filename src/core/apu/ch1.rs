@@ -9,7 +9,7 @@ pub struct Ch1 {
 
     // NR11
     duty: u8,
-    initial_length: u8,
+    length: u8,
 
     // NR12
     initial_volume: u8,
@@ -24,7 +24,6 @@ pub struct Ch1 {
 
     pub enabled: bool,
     envelope: u8,
-    length: u8,
     volume: u8,
 }
 
@@ -56,6 +55,7 @@ impl Channel for Ch1 {
         }
     }
     fn write(&mut self, addr: u16, val: u8) {
+        log::debug!("Ch1: write: {addr:04x?} = {val:02x?}");
         match addr {
             0xff10 => {
                 self.sweep_pace = extract(val, 0b0111_0000);
@@ -64,7 +64,7 @@ impl Channel for Ch1 {
             }
             0xff11 => {
                 self.duty = extract(val, 0b1100_0000);
-                self.initial_length = extract(val, 0b0011_1111);
+                self.length = 64 - extract(val, 0b0011_1111);
             }
             0xff12 => {
                 self.initial_volume = extract(val, 0b1111_0000);
@@ -79,8 +79,10 @@ impl Channel for Ch1 {
                 self.length_enable = (val & 0b0100_0000) > 0;
                 if (val & 0b1000_0000) > 0 {
                     self.enabled = true;
+                    if self.length == 0 {
+                        self.length = 64;
+                    }
                     self.envelope = 0;
-                    self.length = self.initial_length;
                     self.volume = self.initial_volume;
                 }
             }
@@ -88,42 +90,13 @@ impl Channel for Ch1 {
         }
     }
     fn clock(&mut self, div_apu: u8) {
-        if !self.enabled {
-            return;
+        if div_apu % 2 == 0 && self.length_enable && self.length > 0 {
+            let new_length = self.length.wrapping_sub(1);
+            if new_length == 0 {
+                self.enabled = false;
+            }
+            self.length = new_length;
         }
-        // // nr10
-        // let pace = (self.nr10 & 0b0111_0000) >> 4;
-        // let direction = (self.nr10 & 0b0000_1000) >> 4;
-        // let individual_step = (self.nr10 & 0b0000_0111) >> 4;
-        // let lt = (((self.nr14 as u16) & 0b0000_0111) << 8) | self.nr13 as u16;
-        // let step = 2u8.pow(individual_step as u32);
-        // let d_lt = lt / step as u16;
-        // let lt_next = if direction == 0 { lt + d_lt } else { lt - d_lt };
-        // if lt_next > 0x7ff && direction == 0 {
-        //     // would overflow & direction is addition
-        //     // pandocs: this happens when pace is 0 as well
-
-        //     self.enabled = false;
-        // } else if pace != 0 && (div_apu % (pace * 4) == 0) {
-        //     let lt_next_high = ((lt_next & 0xff00) >> 8) as u8;
-        //     let lt_next_low = (lt_next & 0x00ff) as u8;
-        //     self.nr13 = lt_next_low;
-        //     self.nr14 = (self.nr14 & 0b1111_1000) | lt_next_high;
-        // }
-
-        // // nr11
-        // let duty_cyle = (self.nr11 & 0b1100_0000) >> 6;
-        // let length = self.nr11 & 0b0011_1111;
-        // let new_length = if div_apu % 2 == 0 {
-        //     let nl = length.wrapping_add(1);
-        //     if nl == 64 {
-        //         self.enabled = false;
-        //     }
-        //     nl
-        // } else {
-        //     length
-        // };
-        // self.nr11 = (duty_cyle << 6) | length;
     }
 
     fn clear(&mut self) {

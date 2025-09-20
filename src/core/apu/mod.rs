@@ -11,7 +11,6 @@ use crate::core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4};
 pub struct Apu {
     nr50: u8,       // master volume & vin panning
     nr51: u8,       // sound panning
-    nr52: u8,       // audio master control
     wave: [u8; 16], // wave pattern RAM (0xff30-ff3f)
 
     ch1: Ch1,
@@ -105,9 +104,9 @@ impl Apu {
         Default::default()
     }
 
-    pub fn clock(&mut self, div: u8) {
+    pub fn clock(&mut self, sys: u16) {
         // TODO: check the falling edge instead of mod
-        if (div % 0b0010_0000) != 0 {
+        if (sys % 0x2000) != 0 {
             return;
         }
         if !self.enabled {

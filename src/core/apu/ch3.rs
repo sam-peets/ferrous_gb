@@ -6,7 +6,7 @@ pub struct Ch3 {
     dac_enabled: bool,
 
     // NR31
-    initial_length: u8,
+    length: u16,
 
     // NR32
     initial_volume: u8,
@@ -17,15 +17,18 @@ pub struct Ch3 {
     // NR34
     length_enable: bool,
 
-    length: u8,
     pub enabled: bool,
     volume: u8,
 }
 
 impl Channel for Ch3 {
     fn clock(&mut self, div_apu: u8) {
-        if !self.enabled {
-            return;
+        if div_apu % 2 == 0 && self.length_enable && self.length > 0 {
+            let new_length = self.length.wrapping_sub(1);
+            if new_length == 0 {
+                self.enabled = false;
+            }
+            self.length = new_length;
         }
     }
 
@@ -55,12 +58,13 @@ impl Channel for Ch3 {
     }
 
     fn write(&mut self, addr: u16, val: u8) {
+        log::debug!("Ch2: write: {addr:04x?} = {val:02x?}");
         match addr {
             0xff1a => {
                 self.dac_enabled = (val & 0b1000_0000) > 0;
             }
             0xff1b => {
-                self.initial_length = val;
+                self.length = (!val) as u16;
             }
             0xff1c => {
                 self.initial_volume = extract(val, 0b0110_0000);
@@ -73,7 +77,9 @@ impl Channel for Ch3 {
                 self.length_enable = (val & 0b0100_0000) > 0;
                 if (val & 0b1000_0000) > 0 {
                     self.enabled = true;
-                    self.length = self.initial_length;
+                    if self.length == 0 {
+                        self.length = 256;
+                    }
                     self.volume = self.initial_volume;
                 }
             }
