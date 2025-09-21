@@ -110,21 +110,14 @@ impl Channel for Ch4 {
 
                 let length_enable_old = self.length_enable;
                 self.length_enable = (val & 0b0100_0000) > 0;
-                // log::debug!(
-                //     "Ch4: extra clock cases: {} ({}) {} {} {}",
-                //     div_apu,
-                //     div_apu % 2,
-                //     length_enable_old,
-                //     self.length_enable,
-                //     self.length
-                // );
-                // if ((div_apu % 2) == 0)
-                //     && !length_enable_old
-                //     && self.length_enable
-                //     && self.length != 0
-                // {
-                //     self.clock_length();
-                // }
+                if ((div_apu % 2) == 0)
+                    && !length_enable_old
+                    && self.length_enable
+                    && self.length != 0
+                {
+                    log::debug!("Ch1: clocking length from trigger: div_apu: {div_apu:?}");
+                    self.clock_length();
+                }
             }
             _ => unreachable!(),
         }

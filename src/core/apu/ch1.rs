@@ -122,16 +122,19 @@ impl Channel for Ch1 {
             }
             0xff14 => {
                 self.period = ((val as u16 & 0b0000_0111) << 8) | self.period & 0xff;
+                let length_enable_old = self.length_enable;
+                self.length_enable = (val & 0b0100_0000) > 0;
                 if (val & 0b1000_0000) > 0 {
                     self.enabled = true;
+                    if !self.dac_enabled {
+                        self.enabled = false;
+                    }
                     if self.length == 0 {
                         self.length = 64;
                     }
                     self.envelope = 0;
                     self.volume = self.initial_volume;
-                    if !self.dac_enabled {
-                        self.enabled = false;
-                    }
+
                     self.sweep_period_shadow = self.period;
                     self.sweep_timer = 0;
                     self.sweep_enabled = self.sweep_pace > 0 || self.sweep_shift > 0;
@@ -139,25 +142,16 @@ impl Channel for Ch1 {
                         log::debug!("Ch1: sweep overflow check on trigger");
                         self.sweep_overflow_check();
                     }
-                    log::debug!("Ch1: sweep_enabled: {}", self.sweep_enabled)
+                    log::debug!("Ch1: sweep_enabled: {}", self.sweep_enabled);
                 }
-                let length_enable_old = self.length_enable;
-                self.length_enable = (val & 0b0100_0000) > 0;
-                // log::debug!(
-                //     "Ch1: extra clock cases: {} ({}) {} {} {}",
-                //     div_apu,
-                //     div_apu % 2,
-                //     length_enable_old,
-                //     self.length_enable,
-                //     self.length
-                // );
-                // if ((div_apu % 2) == 0)
-                //     && !length_enable_old
-                //     && self.length_enable
-                //     && self.length != 0
-                // {
-                //     self.clock_length();
-                // }
+                if ((div_apu % 2) == 0)
+                    && !length_enable_old
+                    && self.length_enable
+                    && self.length != 0
+                {
+                    log::debug!("Ch1: clocking length from trigger: div_apu: {div_apu:?}");
+                    self.clock_length();
+                }
             }
             _ => unreachable!(),
         }
@@ -165,20 +159,27 @@ impl Channel for Ch1 {
 
     fn clock(&mut self, div_apu: u8) {
         if div_apu % 2 == 0 {
+            log::debug!("Ch1: clocking length from clock: div_apu: {div_apu:?}");
             self.clock_length();
         }
 
-        if div_apu % 4 == 0 {
+        if ((div_apu + 2) % 8) % 4 == 0 {
+            log::debug!("Ch1: clocking sweep: div_apu: {div_apu:?}");
             let pace = if self.sweep_pace == 0 {
                 8
             } else {
                 self.sweep_pace
             };
-            if self.sweep_enabled && (self.sweep_timer % (4 * pace)) == 0 {
+            if self.sweep_enabled && (self.sweep_timer % pace) == 0 {
+                log::debug!(
+                    "Ch1: really really clocking sweep: div_apu: {}, sweep_timer: {}",
+                    div_apu,
+                    self.sweep_timer
+                );
                 self.clock_sweep();
                 self.sweep_overflow_check();
             }
-            self.sweep_timer += 1;
+            self.sweep_timer = self.sweep_timer.wrapping_add(1);
         }
     }
 

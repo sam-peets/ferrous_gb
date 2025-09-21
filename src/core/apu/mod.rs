@@ -4,6 +4,7 @@ mod ch3;
 mod ch4;
 
 use anyhow::anyhow;
+use eframe::glow::ATOMIC_COUNTER_BUFFER_REFERENCED_BY_TESS_EVALUATION_SHADER;
 
 use crate::core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4};
 
@@ -20,6 +21,7 @@ pub struct Apu {
 
     div_apu: u8,
     enabled: bool,
+    sys_old: u16,
 }
 
 trait Channel {
@@ -112,8 +114,11 @@ impl Apu {
     }
 
     pub fn clock(&mut self, sys: u16) {
-        // TODO: check the falling edge instead of mod
-        if (sys % 0x2000) != 0 {
+        // check for a falling edge
+        let old_set = (self.sys_old & 0b0001_0000_0000_0000) > 0;
+        let cur_unset = (sys & 0b0001_0000_0000_0000) == 0;
+        self.sys_old = sys;
+        if !(old_set && cur_unset) {
             return;
         }
         log::debug!("Apu: clock! {sys:04x?}");
@@ -121,12 +126,11 @@ impl Apu {
             // apu is disabled, don't do anything
             return;
         }
+        self.div_apu = self.div_apu.wrapping_add(1) % 8;
 
-        self.ch1.clock(self.div_apu);
-        self.ch2.clock(self.div_apu);
-        self.ch3.clock(self.div_apu);
-        self.ch4.clock(self.div_apu);
-
-        self.div_apu = self.div_apu.wrapping_add(1);
+        self.ch1.clock(self.div_apu % 8);
+        self.ch2.clock(self.div_apu % 8);
+        self.ch3.clock(self.div_apu % 8);
+        self.ch4.clock(self.div_apu % 8);
     }
 }
