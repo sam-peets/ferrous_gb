@@ -53,6 +53,10 @@ impl Apu {
                 0xff25 => self.nr51 = val,
                 0xff26 => {
                     let set_enabled = val & 0b1000_0000;
+                    if set_enabled > 0 && !self.enabled {
+                        // disabled -> enabled transition
+                        self.div_apu = 0;
+                    }
                     self.enabled = set_enabled > 0;
                     if set_enabled == 0 {
                         self.clear_regs();

@@ -95,14 +95,14 @@ impl Channel for Ch4 {
             // NR44
             0xff23 => {
                 if (val & 0b1000_0000) > 0 {
-                    self.enabled = true;
                     self.envelope = 0;
                     self.volume = self.initial_volume;
                     if self.length == 0 {
-                        self.length = if div_apu % 2 == 0 { 63 } else { 64 };
+                        self.length = 64;
                     }
                     // TODO: lfsr
 
+                    self.enabled = true;
                     if !self.dac_enabled {
                         self.enabled = false;
                     }
@@ -110,21 +110,21 @@ impl Channel for Ch4 {
 
                 let length_enable_old = self.length_enable;
                 self.length_enable = (val & 0b0100_0000) > 0;
-                log::debug!(
-                    "Ch4: extra clock cases: {} ({}) {} {} {}",
-                    div_apu,
-                    div_apu % 2,
-                    length_enable_old,
-                    self.length_enable,
-                    self.length
-                );
-                if ((div_apu % 2) == 0)
-                    && !length_enable_old
-                    && self.length_enable
-                    && self.length != 0
-                {
-                    self.clock_length();
-                }
+                // log::debug!(
+                //     "Ch4: extra clock cases: {} ({}) {} {} {}",
+                //     div_apu,
+                //     div_apu % 2,
+                //     length_enable_old,
+                //     self.length_enable,
+                //     self.length
+                // );
+                // if ((div_apu % 2) == 0)
+                //     && !length_enable_old
+                //     && self.length_enable
+                //     && self.length != 0
+                // {
+                //     self.clock_length();
+                // }
             }
             _ => unreachable!(),
         }

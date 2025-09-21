@@ -66,34 +66,34 @@ impl Channel for Ch2 {
             }
             0xff19 => {
                 if (val & 0b1000_0000) > 0 {
-                    self.enabled = true;
                     self.envelope = 0;
                     if self.length == 0 {
-                        self.length = if div_apu % 2 == 0 { 63 } else { 64 };
+                        self.length = 64;
                     }
 
                     self.volume = self.initial_volume;
+                    self.enabled = true;
                     if !self.dac_enabled {
                         self.enabled = false;
                     }
                 }
                 let length_enable_old = self.length_enable;
                 self.length_enable = (val & 0b0100_0000) > 0;
-                log::debug!(
-                    "Ch2: extra clock cases: {} ({}) {} {} {}",
-                    div_apu,
-                    div_apu % 2,
-                    length_enable_old,
-                    self.length_enable,
-                    self.length
-                );
-                if ((div_apu % 2) == 0)
-                    && !length_enable_old
-                    && self.length_enable
-                    && self.length != 0
-                {
-                    self.clock_length();
-                }
+                // log::debug!(
+                //     "Ch2: extra clock cases: {} ({}) {} {} {}",
+                //     div_apu,
+                //     div_apu % 2,
+                //     length_enable_old,
+                //     self.length_enable,
+                //     self.length
+                // );
+                // if ((div_apu % 2) == 0)
+                //     && !length_enable_old
+                //     && self.length_enable
+                //     && self.length != 0
+                // {
+                //     self.clock_length();
+                // }
 
                 self.period = ((val as u16 & 0b0000_0111) << 8) | self.period & 0xff;
             }
