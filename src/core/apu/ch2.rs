@@ -85,7 +85,7 @@ impl Channel for Ch2 {
                     && self.length_enable
                     && self.length != 0
                 {
-                    log::debug!("Ch1: clocking length from trigger: div_apu: {div_apu:?}");
+                    log::debug!("Ch2: clocking length from trigger: div_apu: {div_apu:?}");
                     self.clock_length();
                 }
 

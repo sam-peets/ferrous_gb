@@ -31,11 +31,12 @@ pub struct Ch1 {
     sweep_period_shadow: u16,
     sweep_enabled: bool,
     sweep_timer: u8,
+    sweep_used_negative: bool,
 }
 
 impl Ch1 {
     fn clock_sweep(&mut self) {
-        if self.enabled {
+        if self.enabled && self.sweep_pace != 0 {
             log::debug!(
                 "Ch1: clock sweep: period: {:04x?}, shadow: {:04x?}, shift: {}, direction: {}, pace: {}",
                 self.period,
@@ -46,24 +47,40 @@ impl Ch1 {
             );
             let n_period = self.sweep_overflow_check();
             log::debug!("Ch1: clock_sweep: n_period: {:04x?}", n_period);
-            if self.sweep_shift != 0 && self.sweep_pace != 0 {
+            if self.sweep_shift != 0 {
+                // write back to shadow and period
                 self.sweep_period_shadow = n_period & 0x7ff;
+                self.period = self.sweep_period_shadow;
+                self.sweep_overflow_check();
             }
         }
     }
     fn sweep_overflow_check(&mut self) -> u16 {
-        log::debug!("Ch1: sweep overflow check");
+        log::debug!(
+            "Ch1: overflow check: period: {:04x?}, shadow: {:04x?}, shift: {}, direction: {}, pace: {}",
+            self.period,
+            self.sweep_period_shadow,
+            self.sweep_shift,
+            self.sweep_direction,
+            self.sweep_pace,
+        );
         let d_period = self.sweep_period_shadow >> self.sweep_shift;
         let n_period = if self.sweep_direction == 0 {
             self.sweep_period_shadow + d_period
         } else {
+            log::debug!("Ch1: seen negative mode");
+            self.sweep_used_negative = true;
+            // let period_2s_complement = (!(d_period | (!0x7ff)) + 1) & 0x7ff;
+            // log::debug!("Ch1: negative: {:02x?}", period_2s_complement);
+            // self.sweep_period_shadow.wrapping_add(period_2s_complement) & 0x7ff
             self.sweep_period_shadow - d_period
         };
+        log::debug!("Ch1: n_period: 0x{n_period:04x?}");
         if n_period > 0x07ff {
             log::debug!("Ch1: sweep overflow");
             self.enabled = false;
         }
-        n_period
+        n_period & 0x7ff
     }
 }
 
@@ -101,6 +118,12 @@ impl Channel for Ch1 {
                 self.sweep_pace = extract(val, 0b0111_0000);
                 self.sweep_direction = extract(val, 0b0000_1000);
                 self.sweep_shift = extract(val, 0b0000_0111);
+                if self.sweep_direction == 0 && self.sweep_used_negative {
+                    // "Clearing the sweep negate mode bit in NR10 after at least one sweep calculation
+                    //  has been made using the negate mode since the last trigger causes the channel to be immediately disabled."
+                    log::debug!("Ch1: negative -> positive switch, disabling channel");
+                    self.enabled = false;
+                }
             }
             0xff11 => {
                 self.duty = extract(val, 0b1100_0000);
@@ -135,8 +158,13 @@ impl Channel for Ch1 {
                     self.envelope = 0;
                     self.volume = self.initial_volume;
 
+                    self.sweep_used_negative = false;
                     self.sweep_period_shadow = self.period;
-                    self.sweep_timer = 0;
+                    self.sweep_timer = if self.sweep_pace == 0 {
+                        7
+                    } else {
+                        self.sweep_pace - 1
+                    };
                     self.sweep_enabled = self.sweep_pace > 0 || self.sweep_shift > 0;
                     if self.sweep_shift > 0 {
                         log::debug!("Ch1: sweep overflow check on trigger");
@@ -164,22 +192,29 @@ impl Channel for Ch1 {
         }
 
         if ((div_apu + 2) % 8) % 4 == 0 {
-            log::debug!("Ch1: clocking sweep: div_apu: {div_apu:?}");
-            let pace = if self.sweep_pace == 0 {
-                8
-            } else {
-                self.sweep_pace
-            };
-            if self.sweep_enabled && (self.sweep_timer % pace) == 0 {
+            log::debug!(
+                "Ch1: clocking sweep: div_apu: {div_apu:?}, sweep_timer: {}",
+                self.sweep_timer
+            );
+
+            if self.sweep_enabled && self.sweep_timer == 0 {
                 log::debug!(
                     "Ch1: really really clocking sweep: div_apu: {}, sweep_timer: {}",
                     div_apu,
                     self.sweep_timer
                 );
                 self.clock_sweep();
-                self.sweep_overflow_check();
             }
-            self.sweep_timer = self.sweep_timer.wrapping_add(1);
+            let (n_sweep_timer, underflow) = self.sweep_timer.overflowing_sub(1);
+            self.sweep_timer = if underflow {
+                if self.sweep_pace == 0 {
+                    7
+                } else {
+                    self.sweep_pace - 1
+                }
+            } else {
+                n_sweep_timer
+            }
         }
     }
 
