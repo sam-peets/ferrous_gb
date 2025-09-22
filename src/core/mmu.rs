@@ -45,7 +45,7 @@ pub struct Mmu {
 }
 
 impl Mmu {
-    pub fn new(rom: Vec<u8>) -> anyhow::Result<Self> {
+    pub fn new(rom: Vec<u8>, sample_rate: u32) -> anyhow::Result<Self> {
         let io = IoRegisters {
             ..Default::default()
         };
@@ -64,7 +64,7 @@ impl Mmu {
             ppu_mode: Mode::OamScan,
             cartridge: header,
             sys: 0,
-            apu: Default::default(),
+            apu: Apu::new(sample_rate),
         };
         Ok(mmu)
     }

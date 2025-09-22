@@ -23,10 +23,10 @@ pub struct Cpu {
 }
 
 impl Cpu {
-    pub fn new(rom: Vec<u8>) -> anyhow::Result<Self> {
+    pub fn new(rom: Vec<u8>, sample_rate: u32) -> anyhow::Result<Self> {
         let cpu = Cpu {
             registers: CpuRegisters::default(),
-            mmu: Mmu::new(rom)?,
+            mmu: Mmu::new(rom, sample_rate)?,
             delay: 0,
             cycles: 0,
             ppu: Ppu::new(),
@@ -39,8 +39,8 @@ impl Cpu {
         Ok(cpu)
     }
 
-    pub fn new_fastboot(rom: Vec<u8>) -> anyhow::Result<Self> {
-        let mut cpu = Cpu::new(rom)?;
+    pub fn new_fastboot(rom: Vec<u8>, sample_rate: u32) -> anyhow::Result<Self> {
+        let mut cpu = Cpu::new(rom, sample_rate)?;
         cpu.registers.af.write(0x01b0);
         cpu.registers.bc.write(0x0013);
         cpu.registers.de.write(0x00d8);

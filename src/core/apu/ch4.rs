@@ -107,7 +107,11 @@ impl Channel for Ch4 {
         }
     }
 
-    fn sample(&self) {
+    fn sample(&self) -> f32 {
+        0.0
+    }
+
+    fn clock_fast(&mut self) {
         todo!()
     }
 }

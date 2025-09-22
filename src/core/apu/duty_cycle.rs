@@ -6,6 +6,7 @@ pub const PATTERN_LEN: usize = PATTERN_0.len();
 
 #[derive(Debug, Default)]
 pub struct DutyCycle {
+    counter: Option<u16>,
     position: usize,
     pub pattern: u8,
 }
@@ -20,7 +21,17 @@ impl DutyCycle {
             _ => unreachable!(),
         }
     }
-    pub fn clock(&mut self) {
-        self.position = (self.position + 1) % PATTERN_LEN;
+    pub fn clock(&mut self, period: u16) {
+        if let Some(counter) = self.counter {
+            let next = counter + 1;
+            if next > 0x7ff {
+                self.counter = Some(period);
+                self.position = (self.position + 1) % PATTERN_LEN;
+            } else {
+                self.counter = Some(next);
+            }
+        } else {
+            self.counter = Some(period);
+        }
     }
 }

@@ -102,7 +102,19 @@ impl Channel for Ch2 {
         self.length.clear();
     }
 
-    fn sample(&self) {
-        todo!()
+    fn sample(&self) -> f32 {
+        if self.dac_enabled {
+            let volume = self.volume as f32 / 15.0;
+            let duty = self.duty_cycle.sample() as f32 * 2.0 - 1.0;
+            duty * volume
+        } else {
+            0.0
+        }
+    }
+
+    fn clock_fast(&mut self) {
+        if self.enabled {
+            self.duty_cycle.clock(self.period);
+        }
     }
 }

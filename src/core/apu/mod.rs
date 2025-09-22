@@ -5,9 +5,15 @@ mod ch4;
 mod duty_cycle;
 mod length;
 
-use anyhow::anyhow;
+use std::sync::{Arc, RwLock};
 
-use crate::core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4};
+use anyhow::anyhow;
+use ringbuffer::AllocRingBuffer;
+
+use crate::{
+    core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4},
+    screen::ApuSamples,
+};
 #[derive(Debug, Default)]
 pub struct Apu {
     nr50: u8,       // master volume & vin panning
@@ -22,14 +28,22 @@ pub struct Apu {
     div_apu: u8,
     enabled: bool,
     sys_old: u16,
+    pub cur_sample: ApuSamples,
+    sample_rate: u32,
+    time_since_last_sample: u32,
+    buffer: Vec<f32>,
 }
 
 trait Channel {
     fn read(&self, addr: u16) -> u8;
     fn write(&mut self, div_apu: u8, addr: u16, val: u8, enabled: bool);
+    // Clocks every APU cycle (512hz)
     fn clock(&mut self, div_apu: u8);
+
+    /// Clocks every M-cycle
+    fn clock_fast(&mut self);
     fn clear(&mut self);
-    fn sample(&self);
+    fn sample(&self) -> f32;
 }
 
 impl Apu {
@@ -114,11 +128,33 @@ impl Apu {
 }
 
 impl Apu {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(sample_rate: u32) -> Self {
+        Self {
+            sample_rate,
+            ..Default::default()
+        }
     }
 
     pub fn clock(&mut self, sys: u16) {
+        // clock every M-cycle
+        if sys % 4 == 0 {
+            self.ch1.clock_fast();
+            self.ch2.clock_fast();
+            // self.ch3.clock_fast();
+            // self.ch4.clock_fast();
+        }
+        if sys % (4194304 / self.sample_rate) as u16 == 0 {
+            self.buffer.push(self.sample());
+            if self.buffer.len() == 512 {
+                let mut cur_sample = self
+                    .cur_sample
+                    .write()
+                    .expect("Apu: failed to unlock current sample for writing");
+                *cur_sample = self.buffer.clone();
+                self.buffer = vec![]
+            }
+        }
+
         // check for a falling edge
         let old_set = (self.sys_old & 0b0001_0000_0000_0000) > 0;
         let cur_unset = (sys & 0b0001_0000_0000_0000) == 0;
@@ -137,5 +173,18 @@ impl Apu {
         self.ch3.clock(self.div_apu % 8);
         self.ch4.clock(self.div_apu % 8);
         self.div_apu = self.div_apu.wrapping_add(1) % 8;
+    }
+
+    pub fn sample(&self) -> f32 {
+        // map values into the range -1..=1
+        let ch1_sample = self.ch1.sample();
+        let ch2_sample = self.ch2.sample();
+        let ch3_sample = self.ch3.sample();
+        let ch4_sample = self.ch4.sample();
+        // let ch3_sample = (self.ch3.sample() as f32 / 15.0) * 2.0 - 1.0;
+        // let ch4_sample = (self.ch4.sample() as f32 / 15.0) * 2.0 - 1.0;
+
+        // TODO: use NR51/2 for mixing
+        (ch1_sample + ch2_sample + ch3_sample + ch4_sample) / 4.0
     }
 }

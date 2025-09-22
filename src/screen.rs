@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use cpal::{
     FromSample, SizedSample, Stream,
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -11,6 +13,8 @@ pub struct Debugger {
     pub show_vram: bool,
 }
 
+pub type ApuSamples = Arc<RwLock<Vec<f32>>>;
+
 pub struct Screen {
     pub cpu: Cpu,
     pub screen_texture: TextureHandle,
@@ -22,6 +26,7 @@ pub struct Screen {
 
 impl Screen {
     pub fn new(cpu: Cpu, ctx: &egui::Context) -> Self {
+        let handle = Some(beep(cpu.mmu.apu.cur_sample.clone()));
         let screen_texture = ctx.load_texture(
             "screen",
             egui::ColorImage::filled([160, 144], Color32::BLACK),
@@ -37,7 +42,7 @@ impl Screen {
             screen_texture,
             vram_texture,
             last_frame: 0,
-            handle: None,
+            handle,
             debugger: Debugger::default(),
         }
     }
@@ -139,16 +144,12 @@ impl Screen {
                 ui.add(egui::Image::new(sized));
             });
         }
-
-        if ui.button("audio test").clicked() {
-            self.handle = Some(beep());
-        }
     }
 }
 
 pub struct Handle(Stream);
 
-pub fn beep() -> Handle {
+pub fn beep(data: ApuSamples) -> Handle {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -156,32 +157,25 @@ pub fn beep() -> Handle {
     let config = device.default_output_config().unwrap();
 
     Handle(match config.sample_format() {
-        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into()),
-        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into()),
-        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into()),
+        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), data),
+        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), data),
+        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), data),
         // not all supported sample formats are included in this example
         _ => panic!("Unsupported sample format!"),
     })
 }
 
-fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig) -> Stream
+fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, apu_data: ApuSamples) -> Stream
 where
     T: SizedSample + FromSample<f32>,
 {
     let sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
 
-    // Produce a sinusoid of maximum amplitude.
-    let mut sample_clock = 0f32;
-    let mut next_value = move || {
-        sample_clock = (sample_clock + 1.0) % sample_rate;
-        (sample_clock * 440.0 * 2.0 * 3.141592 / sample_rate).sin()
-    };
-
     let stream = device
         .build_output_stream(
             config,
-            move |data: &mut [T], _| write_data(data, channels, &mut next_value),
+            move |data: &mut [T], _| write_data(data, channels, apu_data.clone()),
             |x| log::error!("stream error: {x:?}"),
             None,
         )
@@ -190,12 +184,34 @@ where
     stream
 }
 
-fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> f32)
+fn write_data<T>(output: &mut [T], channels: usize, samples: ApuSamples)
 where
     T: SizedSample + FromSample<f32>,
 {
-    for frame in output.chunks_mut(channels) {
-        let value: T = T::from_sample(next_sample());
+    let samples = {
+        let x = samples.read().expect("Screen: couldn't unlock samples");
+        (*x).clone()
+    };
+    let chunks = output.chunks_mut(channels);
+    let chunks_len = chunks.len();
+    let samples_len = samples.len();
+    let samples_time = samples_len as f32 / 1048576.0;
+    log::info!(
+        "Screen: write_data: chunks len: {}, samples len: {}, samples time: {}",
+        chunks_len,
+        samples_len,
+        samples_time
+    );
+
+    for (i, frame) in chunks.enumerate() {
+        let lerp = ((i as f32 / chunks_len as f32) * samples_len as f32).floor() as usize;
+        let sample = if samples.is_empty() {
+            0.0
+        } else {
+            samples[lerp]
+        };
+        let value: T = T::from_sample(sample);
+
         for sample in frame.iter_mut() {
             *sample = value;
         }

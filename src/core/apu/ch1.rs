@@ -69,9 +69,6 @@ impl Ch1 {
         } else {
             log::debug!("Ch1: seen negative mode");
             self.sweep_used_negative = true;
-            // let period_2s_complement = (!(d_period | (!0x7ff)) + 1) & 0x7ff;
-            // log::debug!("Ch1: negative: {:02x?}", period_2s_complement);
-            // self.sweep_period_shadow.wrapping_add(period_2s_complement) & 0x7ff
             self.sweep_period_shadow - d_period
         };
         log::debug!("Ch1: n_period: 0x{n_period:04x?}");
@@ -222,7 +219,19 @@ impl Channel for Ch1 {
         self.length.clear();
     }
 
-    fn sample(&self) {
-        todo!()
+    fn sample(&self) -> f32 {
+        if self.dac_enabled {
+            let volume = self.volume as f32 / 15.0;
+            let duty = self.duty_cycle.sample() as f32 * 2.0 - 1.0;
+            duty * volume
+        } else {
+            0.0
+        }
+    }
+
+    fn clock_fast(&mut self) {
+        if self.enabled {
+            self.duty_cycle.clock(self.period);
+        }
     }
 }
