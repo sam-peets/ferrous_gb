@@ -41,7 +41,10 @@ impl Channel for Ch3 {
     }
 
     fn clear(&mut self) {
-        *self = Default::default();
+        *self = Ch3 {
+            length: self.length,
+            ..Default::default()
+        };
     }
 
     fn read(&self, addr: u16) -> u8 {
@@ -65,7 +68,7 @@ impl Channel for Ch3 {
         }
     }
 
-    fn write(&mut self, div_apu: u8, addr: u16, val: u8) {
+    fn write(&mut self, div_apu: u8, addr: u16, val: u8, _: bool) {
         // log::debug!("Ch3: write: {addr:04x?} = {val:02x?}");
         match addr {
             0xff1a => {
@@ -85,28 +88,31 @@ impl Channel for Ch3 {
                 self.period = (self.period & 0xff00) | val as u16;
             }
             0xff1e => {
-                if (val & 0b1000_0000) > 0 {
-                    if self.length == 0 {
-                        self.length = 256;
-                    }
-                    self.volume = self.initial_volume;
-                    self.enabled = true;
-                    if !self.dac_enabled {
-                        self.enabled = false;
-                    }
-                }
-
                 self.period = (self.period & 0x00ff) | (((val & 0b0000_0111) as u16) << 8);
                 let length_enable_old = self.length_enable;
                 self.length_enable = (val & 0b0100_0000) > 0;
 
-                if ((div_apu % 2) == 0)
+                if ((div_apu % 2) == 1)
                     && !length_enable_old
                     && self.length_enable
                     && self.length != 0
                 {
                     log::debug!("Ch3: clocking length from trigger: div_apu: {div_apu:?}");
                     self.clock_length();
+                }
+                if (val & 0b1000_0000) > 0 {
+                    if self.length == 0 {
+                        self.length = if (div_apu % 2) == 1 && self.length_enable {
+                            255
+                        } else {
+                            256
+                        };
+                    }
+                    self.volume = self.initial_volume;
+                    self.enabled = true;
+                    if !self.dac_enabled {
+                        self.enabled = false;
+                    }
                 }
             }
             _ => unreachable!(),

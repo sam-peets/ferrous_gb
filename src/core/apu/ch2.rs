@@ -44,11 +44,14 @@ impl Channel for Ch2 {
             _ => unreachable!(),
         }
     }
-    fn write(&mut self, div_apu: u8, addr: u16, val: u8) {
+    fn write(&mut self, div_apu: u8, addr: u16, val: u8, enabled: bool) {
         // log::debug!("Ch2: write: {addr:04x?} = {val:02x?}");
         match addr {
             0xff16 => {
-                self.duty = extract(val, 0b1100_0000);
+                // length registers are writable when apu is disabled, but not duty
+                if enabled {
+                    self.duty = extract(val, 0b1100_0000);
+                }
                 self.length = 64 - extract(val, 0b0011_1111);
                 log::debug!("Ch2: write length: {}", self.length);
             }
@@ -65,31 +68,35 @@ impl Channel for Ch2 {
                 self.period = (self.period & 0xff00) | val as u16;
             }
             0xff19 => {
-                if (val & 0b1000_0000) > 0 {
-                    self.envelope = 0;
-                    if self.length == 0 {
-                        self.length = 64;
-                    }
-
-                    self.volume = self.initial_volume;
-                    self.enabled = true;
-                    if !self.dac_enabled {
-                        self.enabled = false;
-                    }
-                }
+                self.period = ((val as u16 & 0b0000_0111) << 8) | self.period & 0xff;
                 let length_enable_old = self.length_enable;
                 self.length_enable = (val & 0b0100_0000) > 0;
 
-                if ((div_apu % 2) == 0)
+                if ((div_apu % 2) == 1)
                     && !length_enable_old
                     && self.length_enable
                     && self.length != 0
                 {
-                    log::debug!("Ch2: clocking length from trigger: div_apu: {div_apu:?}");
+                    log::debug!("Ch2: clocking length from NR14 write: div_apu: {div_apu:?}");
                     self.clock_length();
                 }
+                if (val & 0b1000_0000) > 0 {
+                    self.enabled = true;
+                    if !self.dac_enabled {
+                        self.enabled = false;
+                    }
+                    self.envelope = 0;
 
-                self.period = ((val as u16 & 0b0000_0111) << 8) | self.period & 0xff;
+                    if self.length == 0 {
+                        self.length = if (div_apu % 2) == 1 && self.length_enable {
+                            63
+                        } else {
+                            64
+                        };
+                    }
+
+                    self.volume = self.initial_volume;
+                }
             }
             _ => unreachable!(),
         }
@@ -109,8 +116,10 @@ impl Channel for Ch2 {
             self.length = new_length;
         }
     }
-
     fn clear(&mut self) {
-        *self = Default::default();
+        *self = Ch2 {
+            length: self.length,
+            ..Default::default()
+        };
     }
 }

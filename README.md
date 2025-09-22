@@ -12,7 +12,19 @@
 Blargg Test Results:
 - `cpu_instrs`: PASS
 - `instr_timing`: PASS
-- `dmg_sound`: 4/12
+- `dmg_sound`
+    - `01-registers`: PASS
+    - `02-len ctr`: PASS
+    - `03-trigger`: PASS
+    - `04-sweep`: PASS
+    - `05-sweep details`: PASS
+    - `06-overflow on trigger`: PASS
+    - `07-len sweep period sync`: PASS
+    - `08-len ctr during power`: PASS
+    - `09-wave read while on`: 1/?
+    - `10-wave trigger while on`: 1/?
+    - `11-regs after power`: PASS
+    - `12-wave write while on`: 1/?
 
 ## Credits
 

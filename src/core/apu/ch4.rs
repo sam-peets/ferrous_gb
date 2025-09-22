@@ -42,7 +42,10 @@ impl Channel for Ch4 {
     }
 
     fn clear(&mut self) {
-        *self = Default::default();
+        *self = Ch4 {
+            length: self.length,
+            ..Default::default()
+        };
     }
 
     fn read(&self, addr: u16) -> u8 {
@@ -68,7 +71,7 @@ impl Channel for Ch4 {
         }
     }
 
-    fn write(&mut self, div_apu: u8, addr: u16, val: u8) {
+    fn write(&mut self, div_apu: u8, addr: u16, val: u8, _: bool) {
         // log::debug!("Ch4: write: {addr:04x?} = {val:02x?}");
         match addr {
             // NR41
@@ -94,11 +97,26 @@ impl Channel for Ch4 {
             }
             // NR44
             0xff23 => {
+                let length_enable_old = self.length_enable;
+                self.length_enable = (val & 0b0100_0000) > 0;
+                if ((div_apu % 2) == 1)
+                    && !length_enable_old
+                    && self.length_enable
+                    && self.length != 0
+                {
+                    log::debug!("Ch4: clocking length from trigger: div_apu: {div_apu:?}");
+                    self.clock_length();
+                }
                 if (val & 0b1000_0000) > 0 {
                     self.envelope = 0;
                     self.volume = self.initial_volume;
+
                     if self.length == 0 {
-                        self.length = 64;
+                        self.length = if (div_apu % 2) == 1 && self.length_enable {
+                            63
+                        } else {
+                            64
+                        };
                     }
                     // TODO: lfsr
 
@@ -106,17 +124,6 @@ impl Channel for Ch4 {
                     if !self.dac_enabled {
                         self.enabled = false;
                     }
-                }
-
-                let length_enable_old = self.length_enable;
-                self.length_enable = (val & 0b0100_0000) > 0;
-                if ((div_apu % 2) == 0)
-                    && !length_enable_old
-                    && self.length_enable
-                    && self.length != 0
-                {
-                    log::debug!("Ch4: clocking length from trigger: div_apu: {div_apu:?}");
-                    self.clock_length();
                 }
             }
             _ => unreachable!(),
