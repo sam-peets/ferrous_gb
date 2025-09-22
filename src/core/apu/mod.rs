@@ -3,7 +3,6 @@ mod ch2;
 mod ch3;
 mod ch4;
 mod duty_cycle;
-mod sweep;
 
 use anyhow::anyhow;
 
