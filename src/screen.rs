@@ -1,10 +1,14 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, RwLock},
+};
 
 use cpal::{
     FromSample, SizedSample, Stream,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 use egui::{Color32, Key, TextureHandle, Vec2};
+use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 use crate::core::{Buttons, cpu::Cpu};
 
@@ -13,7 +17,8 @@ pub struct Debugger {
     pub show_vram: bool,
 }
 
-pub type ApuSamples = Arc<RwLock<Vec<f32>>>;
+pub const MAX_AUDIO_BUFFER: usize = 2048;
+pub type ApuSamples = Arc<RwLock<VecDeque<f32>>>;
 
 pub struct Screen {
     pub cpu: Cpu,
@@ -48,16 +53,20 @@ impl Screen {
     }
 
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
-        for _ in 0..70224 {
-            // is this right?
-            self.cpu.cycle()?;
-            self.cpu.mmu.apu.clock(self.cpu.mmu.sys);
-            self.cpu.ppu.clock(&mut self.cpu.mmu)?;
+        // sync the cpu to the audio
+        if self.cpu.mmu.apu.cur_sample.read().unwrap().len() <= MAX_AUDIO_BUFFER {
+            for _ in 0..70224 {
+                // is this right?
+                self.cpu.cycle()?;
+                self.cpu.mmu.apu.clock(self.cpu.mmu.sys);
+                self.cpu.ppu.clock(&mut self.cpu.mmu)?;
 
-            self.cpu.mmu.sys = self.cpu.mmu.sys.wrapping_add(1);
-            // TODO: add a way to look at falling edges on sys/div
-            // off the top of my head, APU needs it, timer needs it...
+                self.cpu.mmu.sys = self.cpu.mmu.sys.wrapping_add(1);
+                // TODO: add a way to look at falling edges on sys/div
+                // off the top of my head, APU needs it, timer needs it...
+            }
         }
+
         let f = self
             .cpu
             .ppu
@@ -188,28 +197,12 @@ fn write_data<T>(output: &mut [T], channels: usize, samples: ApuSamples)
 where
     T: SizedSample + FromSample<f32>,
 {
-    let samples = {
-        let x = samples.read().expect("Screen: couldn't unlock samples");
-        (*x).clone()
-    };
+    let mut samples = samples.write().expect("Screen: couldn't unlock samples");
+
     let chunks = output.chunks_mut(channels);
-    let chunks_len = chunks.len();
-    let samples_len = samples.len();
-    let samples_time = samples_len as f32 / 1048576.0;
-    log::info!(
-        "Screen: write_data: chunks len: {}, samples len: {}, samples time: {}",
-        chunks_len,
-        samples_len,
-        samples_time
-    );
 
     for (i, frame) in chunks.enumerate() {
-        let lerp = ((i as f32 / chunks_len as f32) * samples_len as f32).floor() as usize;
-        let sample = if samples.is_empty() {
-            0.0
-        } else {
-            samples[lerp]
-        };
+        let sample = samples.pop_front().unwrap_or_default();
         let value: T = T::from_sample(sample);
 
         for sample in frame.iter_mut() {

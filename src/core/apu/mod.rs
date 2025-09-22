@@ -8,7 +8,7 @@ mod length;
 use std::sync::{Arc, RwLock};
 
 use anyhow::anyhow;
-use ringbuffer::AllocRingBuffer;
+use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 use crate::{
     core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4},
@@ -31,7 +31,6 @@ pub struct Apu {
     pub cur_sample: ApuSamples,
     sample_rate: u32,
     time_since_last_sample: u32,
-    buffer: Vec<f32>,
 }
 
 trait Channel {
@@ -144,15 +143,11 @@ impl Apu {
             // self.ch4.clock_fast();
         }
         if sys % (4194304 / self.sample_rate) as u16 == 0 {
-            self.buffer.push(self.sample());
-            if self.buffer.len() == 512 {
-                let mut cur_sample = self
-                    .cur_sample
-                    .write()
-                    .expect("Apu: failed to unlock current sample for writing");
-                *cur_sample = self.buffer.clone();
-                self.buffer = vec![]
-            }
+            let mut cur_sample = self
+                .cur_sample
+                .write()
+                .expect("Apu: failed to unlock current sample for writing");
+            cur_sample.push_back(self.sample());
         }
 
         // check for a falling edge
