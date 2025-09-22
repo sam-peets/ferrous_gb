@@ -1,12 +1,12 @@
-use crate::core::{apu::Channel, util::extract};
+use crate::core::{
+    apu::{Channel, length::Length},
+    util::extract,
+};
 
 #[derive(Debug, Default)]
 pub struct Ch3 {
     // NR30
     dac_enabled: bool,
-
-    // NR31
-    length: u16,
 
     // NR32
     initial_volume: u8,
@@ -14,29 +14,17 @@ pub struct Ch3 {
     // NR32 & NR33
     period: u16,
 
-    // NR34
-    length_enable: bool,
-
     pub enabled: bool,
     volume: u8,
+    length: Length<u16>,
 }
 
 impl Ch3 {}
 
 impl Channel for Ch3 {
     fn clock(&mut self, div_apu: u8) {
-        if div_apu % 2 == 0 && self.length_enable && self.length > 0 {
-            self.clock_length();
-        }
-    }
-    fn clock_length(&mut self) {
-        if self.length_enable && self.length > 0 {
-            let new_length = self.length.wrapping_sub(1);
-            if new_length == 0 {
-                self.enabled = false;
-            }
-            log::debug!("ch3: clock length: {} -> {}", self.length, new_length);
-            self.length = new_length;
+        if div_apu % 2 == 0 && self.length.clock() {
+            self.enabled = false;
         }
     }
 
@@ -45,6 +33,7 @@ impl Channel for Ch3 {
             length: self.length,
             ..Default::default()
         };
+        self.length.clear();
     }
 
     fn read(&self, addr: u16) -> u8 {
@@ -60,7 +49,7 @@ impl Channel for Ch3 {
             }
             0xff1d => 0xff,
             0xff1e => {
-                let length_enable = if self.length_enable { 1 << 6 } else { 0 };
+                let length_enable = if self.length.enable { 1 << 6 } else { 0 };
                 length_enable | 0b1011_1111
             }
 
@@ -78,8 +67,8 @@ impl Channel for Ch3 {
                 }
             }
             0xff1b => {
-                self.length = 256 - (val as u16);
-                log::debug!("Ch3: write length: {}", self.length);
+                self.length.length = 256 - (val as u16);
+                log::debug!("Ch3: write length: {}", self.length.length);
             }
             0xff1c => {
                 self.initial_volume = extract(val, 0b0110_0000);
@@ -89,25 +78,14 @@ impl Channel for Ch3 {
             }
             0xff1e => {
                 self.period = (self.period & 0x00ff) | (((val & 0b0000_0111) as u16) << 8);
-                let length_enable_old = self.length_enable;
-                self.length_enable = (val & 0b0100_0000) > 0;
+                let length_enable = (val & 0b0100_0000) > 0;
 
-                if ((div_apu % 2) == 1)
-                    && !length_enable_old
-                    && self.length_enable
-                    && self.length != 0
-                {
-                    log::debug!("Ch3: clocking length from trigger: div_apu: {div_apu:?}");
-                    self.clock_length();
+                if self.length.write_nrx4(length_enable, div_apu) {
+                    self.enabled = false;
                 }
+
                 if (val & 0b1000_0000) > 0 {
-                    if self.length == 0 {
-                        self.length = if (div_apu % 2) == 1 && self.length_enable {
-                            255
-                        } else {
-                            256
-                        };
-                    }
+                    self.length.trigger(256, div_apu);
                     self.volume = self.initial_volume;
                     self.enabled = true;
                     if !self.dac_enabled {

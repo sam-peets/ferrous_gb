@@ -1,10 +1,10 @@
-use crate::core::{apu::Channel, util::extract};
+use crate::core::{
+    apu::{Channel, length::Length},
+    util::extract,
+};
 
 #[derive(Debug, Default)]
 pub struct Ch4 {
-    // NR41
-    length: u8,
-
     // NR42
     initial_volume: u8,
     envelope_dir: u8,
@@ -15,29 +15,17 @@ pub struct Ch4 {
     lfsr_width: u8,
     clock_divider: u8,
 
-    // NR44
-    length_enable: bool,
-
     pub enabled: bool,
     envelope: u8,
     volume: u8,
     dac_enabled: bool,
+    length: Length<u8>,
 }
 
 impl Channel for Ch4 {
     fn clock(&mut self, div_apu: u8) {
-        if div_apu % 2 == 0 {
-            self.clock_length();
-        }
-    }
-    fn clock_length(&mut self) {
-        if self.length_enable && self.length > 0 {
-            let new_length = self.length.wrapping_sub(1);
-            if new_length == 0 {
-                self.enabled = false;
-            }
-            log::debug!("ch4: clock length: {} -> {}", self.length, new_length);
-            self.length = new_length;
+        if div_apu % 2 == 0 && self.length.clock() {
+            self.enabled = false;
         }
     }
 
@@ -46,6 +34,7 @@ impl Channel for Ch4 {
             length: self.length,
             ..Default::default()
         };
+        self.length.clear();
     }
 
     fn read(&self, addr: u16) -> u8 {
@@ -64,7 +53,7 @@ impl Channel for Ch4 {
                 clock | width | div
             }
             0xff23 => {
-                let length = if self.length_enable { 1 << 6 } else { 0 };
+                let length = if self.length.enable { 1 << 6 } else { 0 };
                 0b1011_1111 | length
             }
             _ => unreachable!(),
@@ -76,8 +65,8 @@ impl Channel for Ch4 {
         match addr {
             // NR41
             0xff20 => {
-                self.length = 64 - extract(val, 0b0011_1111);
-                log::debug!("Ch4: write length: {}", self.length);
+                self.length.length = 64 - extract(val, 0b0011_1111);
+                log::debug!("Ch4: write length: {}", self.length.length);
             }
             // NR42
             0xff21 => {
@@ -97,27 +86,15 @@ impl Channel for Ch4 {
             }
             // NR44
             0xff23 => {
-                let length_enable_old = self.length_enable;
-                self.length_enable = (val & 0b0100_0000) > 0;
-                if ((div_apu % 2) == 1)
-                    && !length_enable_old
-                    && self.length_enable
-                    && self.length != 0
-                {
-                    log::debug!("Ch4: clocking length from trigger: div_apu: {div_apu:?}");
-                    self.clock_length();
+                let length_enable = (val & 0b0100_0000) > 0;
+                if self.length.write_nrx4(length_enable, div_apu) {
+                    self.enabled = false;
                 }
                 if (val & 0b1000_0000) > 0 {
                     self.envelope = 0;
                     self.volume = self.initial_volume;
 
-                    if self.length == 0 {
-                        self.length = if (div_apu % 2) == 1 && self.length_enable {
-                            63
-                        } else {
-                            64
-                        };
-                    }
+                    self.length.trigger(64, div_apu);
                     // TODO: lfsr
 
                     self.enabled = true;

@@ -3,6 +3,7 @@ mod ch2;
 mod ch3;
 mod ch4;
 mod duty_cycle;
+mod length;
 
 use anyhow::anyhow;
 
@@ -28,7 +29,6 @@ trait Channel {
     fn write(&mut self, div_apu: u8, addr: u16, val: u8, enabled: bool);
     fn clock(&mut self, div_apu: u8);
     fn clear(&mut self);
-    fn clock_length(&mut self);
     fn sample(&self);
 }
 

@@ -1,5 +1,5 @@
 use crate::core::{
-    apu::{Channel, duty_cycle::DutyCycle},
+    apu::{Channel, duty_cycle::DutyCycle, length::Length},
     util::extract,
 };
 
@@ -10,9 +10,6 @@ pub struct Ch1 {
     sweep_direction: u8,
     sweep_shift: u8,
 
-    // NR11
-    length: u8,
-
     // NR12
     initial_volume: u8,
     envelope_dir: u8,
@@ -20,9 +17,6 @@ pub struct Ch1 {
 
     // NR13 and NR14
     period: u16,
-
-    // NR14
-    length_enable: bool,
 
     pub enabled: bool,
     envelope: u8,
@@ -36,6 +30,7 @@ pub struct Ch1 {
     sweep_used_negative: bool,
 
     duty_cycle: DutyCycle,
+    length: Length<u8>,
 }
 
 impl Ch1 {
@@ -109,7 +104,7 @@ impl Channel for Ch1 {
             }
             0xff13 => 0xff, // write-only
             0xff14 => {
-                let length = if self.length_enable { 1 << 6 } else { 0 };
+                let length = if self.length.enable { 1 << 6 } else { 0 };
                 length | 0b1011_1111
             }
             _ => unreachable!(),
@@ -134,8 +129,8 @@ impl Channel for Ch1 {
                 if enabled {
                     self.duty_cycle.pattern = extract(val, 0b1100_0000);
                 }
-                self.length = 64 - extract(val, 0b0011_1111);
-                log::debug!("Ch1: write length: {}", self.length);
+                self.length.length = 64 - extract(val, 0b0011_1111);
+                log::debug!("Ch1: write length: {}", self.length.length);
             }
             0xff12 => {
                 self.initial_volume = extract(val, 0b1111_0000);
@@ -152,28 +147,19 @@ impl Channel for Ch1 {
             }
             0xff14 => {
                 self.period = ((val as u16 & 0b0000_0111) << 8) | self.period & 0xff;
-                let length_enable_old = self.length_enable;
-                self.length_enable = (val & 0b0100_0000) > 0;
-                if ((div_apu % 2) == 1)
-                    && !length_enable_old
-                    && self.length_enable
-                    && self.length != 0
-                {
-                    log::debug!("Ch1: clocking length from NR14 write: div_apu: {div_apu:?}");
-                    self.clock_length();
+                let trigger = (val & 0b1000_0000) > 0;
+                let length_enable = (val & 0b0100_0000) > 0;
+                if self.length.write_nrx4(length_enable, div_apu) {
+                    self.enabled = false;
                 }
-                if (val & 0b1000_0000) > 0 {
+
+                if trigger {
                     self.enabled = true;
                     if !self.dac_enabled {
                         self.enabled = false;
                     }
-                    if self.length == 0 {
-                        self.length = if (div_apu % 2) == 1 && self.length_enable {
-                            63
-                        } else {
-                            64
-                        };
-                    }
+                    self.length.trigger(64, div_apu);
+
                     self.envelope = 0;
                     self.volume = self.initial_volume;
 
@@ -197,9 +183,8 @@ impl Channel for Ch1 {
     }
 
     fn clock(&mut self, div_apu: u8) {
-        if div_apu % 2 == 0 {
-            log::debug!("Ch1: clocking length from clock: div_apu: {div_apu:?}");
-            self.clock_length();
+        if div_apu % 2 == 0 && self.length.clock() {
+            self.enabled = false;
         }
 
         if ((div_apu + 2) % 8) % 4 == 0 {
@@ -229,22 +214,12 @@ impl Channel for Ch1 {
         }
     }
 
-    fn clock_length(&mut self) {
-        if self.length_enable && self.length > 0 {
-            let new_length = self.length.wrapping_sub(1);
-            if new_length == 0 {
-                self.enabled = false;
-            }
-            log::debug!("ch1: clock length: {} -> {}", self.length, new_length);
-            self.length = new_length;
-        }
-    }
-
     fn clear(&mut self) {
         *self = Ch1 {
             length: self.length,
             ..Default::default()
         };
+        self.length.clear();
     }
 
     fn sample(&self) {

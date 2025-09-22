@@ -1,13 +1,10 @@
 use crate::core::{
-    apu::{Channel, duty_cycle::DutyCycle},
+    apu::{Channel, duty_cycle::DutyCycle, length::Length},
     util::extract,
 };
 
 #[derive(Debug, Default)]
 pub struct Ch2 {
-    // NR21
-    length: u8,
-
     // NR22
     initial_volume: u8,
     envelope_dir: u8,
@@ -16,15 +13,13 @@ pub struct Ch2 {
     // NR23 and NR24
     period: u16,
 
-    // NR24
-    length_enable: bool,
-
     pub enabled: bool,
     envelope: u8,
     volume: u8,
     dac_enabled: bool,
 
     duty_cycle: DutyCycle,
+    length: Length<u8>,
 }
 
 impl Channel for Ch2 {
@@ -42,7 +37,7 @@ impl Channel for Ch2 {
             }
             0xff18 => 0xff, // write-only
             0xff19 => {
-                let length = if self.length_enable { 1 << 6 } else { 0 };
+                let length = if self.length.enable { 1 << 6 } else { 0 };
                 length | 0b1011_1111
             }
             _ => unreachable!(),
@@ -56,8 +51,8 @@ impl Channel for Ch2 {
                 if enabled {
                     self.duty_cycle.pattern = extract(val, 0b1100_0000);
                 }
-                self.length = 64 - extract(val, 0b0011_1111);
-                log::debug!("Ch2: write length: {}", self.length);
+                self.length.length = 64 - extract(val, 0b0011_1111);
+                log::debug!("Ch2: write length: {}", self.length.length);
             }
             0xff17 => {
                 self.initial_volume = extract(val, 0b1111_0000);
@@ -73,16 +68,10 @@ impl Channel for Ch2 {
             }
             0xff19 => {
                 self.period = ((val as u16 & 0b0000_0111) << 8) | self.period & 0xff;
-                let length_enable_old = self.length_enable;
-                self.length_enable = (val & 0b0100_0000) > 0;
+                let length_enable = (val & 0b0100_0000) > 0;
 
-                if ((div_apu % 2) == 1)
-                    && !length_enable_old
-                    && self.length_enable
-                    && self.length != 0
-                {
-                    log::debug!("Ch2: clocking length from NR14 write: div_apu: {div_apu:?}");
-                    self.clock_length();
+                if self.length.write_nrx4(length_enable, div_apu) {
+                    self.enabled = false;
                 }
                 if (val & 0b1000_0000) > 0 {
                     self.enabled = true;
@@ -91,13 +80,7 @@ impl Channel for Ch2 {
                     }
                     self.envelope = 0;
 
-                    if self.length == 0 {
-                        self.length = if (div_apu % 2) == 1 && self.length_enable {
-                            63
-                        } else {
-                            64
-                        };
-                    }
+                    self.length.trigger(64, div_apu);
 
                     self.volume = self.initial_volume;
                 }
@@ -106,25 +89,17 @@ impl Channel for Ch2 {
         }
     }
     fn clock(&mut self, div_apu: u8) {
-        if div_apu % 2 == 0 {
-            self.clock_length();
+        if div_apu % 2 == 0 && self.length.clock() {
+            self.enabled = false
         }
     }
-    fn clock_length(&mut self) {
-        if self.length_enable && self.length > 0 {
-            let new_length = self.length.wrapping_sub(1);
-            if new_length == 0 {
-                self.enabled = false;
-            }
-            log::debug!("ch2: clock length: {} -> {}", self.length, new_length);
-            self.length = new_length;
-        }
-    }
+
     fn clear(&mut self) {
         *self = Ch2 {
             length: self.length,
             ..Default::default()
         };
+        self.length.clear();
     }
 
     fn sample(&self) {
