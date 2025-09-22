@@ -1,4 +1,7 @@
-use crate::core::{apu::Channel, util::extract};
+use crate::core::{
+    apu::{Channel, duty_cycle::DutyCycle},
+    util::extract,
+};
 
 #[derive(Debug, Default)]
 pub struct Ch1 {
@@ -8,7 +11,6 @@ pub struct Ch1 {
     sweep_shift: u8,
 
     // NR11
-    duty: u8,
     length: u8,
 
     // NR12
@@ -32,6 +34,8 @@ pub struct Ch1 {
     sweep_enabled: bool,
     sweep_timer: u8,
     sweep_used_negative: bool,
+
+    duty_cycle: DutyCycle,
 }
 
 impl Ch1 {
@@ -94,7 +98,7 @@ impl Channel for Ch1 {
                 0b1000_0000 | pace | direction | shift
             }
             0xff11 => {
-                let duty = self.duty << 6;
+                let duty = self.duty_cycle.pattern << 6;
                 0b0011_1111 | duty
             }
             0xff12 => {
@@ -128,7 +132,7 @@ impl Channel for Ch1 {
             0xff11 => {
                 // length registers are writable when apu is disabled, but not duty
                 if enabled {
-                    self.duty = extract(val, 0b1100_0000);
+                    self.duty_cycle.pattern = extract(val, 0b1100_0000);
                 }
                 self.length = 64 - extract(val, 0b0011_1111);
                 log::debug!("Ch1: write length: {}", self.length);
@@ -241,5 +245,9 @@ impl Channel for Ch1 {
             length: self.length,
             ..Default::default()
         };
+    }
+
+    fn sample(&self) {
+        todo!()
     }
 }

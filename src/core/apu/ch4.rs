@@ -129,4 +129,8 @@ impl Channel for Ch4 {
             _ => unreachable!(),
         }
     }
+
+    fn sample(&self) {
+        todo!()
+    }
 }

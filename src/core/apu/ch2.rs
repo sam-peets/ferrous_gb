@@ -1,9 +1,11 @@
-use crate::core::{apu::Channel, util::extract};
+use crate::core::{
+    apu::{Channel, duty_cycle::DutyCycle},
+    util::extract,
+};
 
 #[derive(Debug, Default)]
 pub struct Ch2 {
     // NR21
-    duty: u8,
     length: u8,
 
     // NR22
@@ -21,13 +23,15 @@ pub struct Ch2 {
     envelope: u8,
     volume: u8,
     dac_enabled: bool,
+
+    duty_cycle: DutyCycle,
 }
 
 impl Channel for Ch2 {
     fn read(&self, addr: u16) -> u8 {
         match addr {
             0xff16 => {
-                let duty = self.duty << 6;
+                let duty = self.duty_cycle.pattern << 6;
                 0b0011_1111 | duty
             }
             0xff17 => {
@@ -50,7 +54,7 @@ impl Channel for Ch2 {
             0xff16 => {
                 // length registers are writable when apu is disabled, but not duty
                 if enabled {
-                    self.duty = extract(val, 0b1100_0000);
+                    self.duty_cycle.pattern = extract(val, 0b1100_0000);
                 }
                 self.length = 64 - extract(val, 0b0011_1111);
                 log::debug!("Ch2: write length: {}", self.length);
@@ -121,5 +125,9 @@ impl Channel for Ch2 {
             length: self.length,
             ..Default::default()
         };
+    }
+
+    fn sample(&self) {
+        todo!()
     }
 }

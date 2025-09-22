@@ -2,11 +2,12 @@ mod ch1;
 mod ch2;
 mod ch3;
 mod ch4;
+mod duty_cycle;
+mod sweep;
 
 use anyhow::anyhow;
 
 use crate::core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4};
-
 #[derive(Debug, Default)]
 pub struct Apu {
     nr50: u8,       // master volume & vin panning
@@ -29,6 +30,7 @@ trait Channel {
     fn clock(&mut self, div_apu: u8);
     fn clear(&mut self);
     fn clock_length(&mut self);
+    fn sample(&self);
 }
 
 impl Apu {
