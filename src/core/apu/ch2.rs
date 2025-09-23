@@ -1,25 +1,19 @@
 use crate::core::{
-    apu::{Channel, duty_cycle::DutyCycle, length::Length},
+    apu::{Channel, duty_cycle::DutyCycle, envelope::Envelope, length::Length},
     util::extract,
 };
 
 #[derive(Debug, Default)]
 pub struct Ch2 {
-    // NR22
-    initial_volume: u8,
-    envelope_dir: u8,
-    envelope_pace: u8,
-
     // NR23 and NR24
     period: u16,
 
     pub enabled: bool,
-    envelope: u8,
-    volume: u8,
     dac_enabled: bool,
 
     duty_cycle: DutyCycle,
     length: Length<u8>,
+    envelope: Envelope,
 }
 
 impl Channel for Ch2 {
@@ -30,9 +24,9 @@ impl Channel for Ch2 {
                 0b0011_1111 | duty
             }
             0xff17 => {
-                let volume = self.initial_volume << 4;
-                let dir = self.envelope_dir << 3;
-                let pace = self.envelope_pace;
+                let volume = self.envelope.initial_volume << 4;
+                let dir = self.envelope.direction << 3;
+                let pace = self.envelope.pace;
                 volume | dir | pace
             }
             0xff18 => 0xff, // write-only
@@ -55,9 +49,9 @@ impl Channel for Ch2 {
                 log::debug!("Ch2: write length: {}", self.length.length);
             }
             0xff17 => {
-                self.initial_volume = extract(val, 0b1111_0000);
-                self.envelope_dir = extract(val, 0b0000_1000);
-                self.envelope_pace = extract(val, 0b0000_0111);
+                self.envelope.initial_volume = extract(val, 0b1111_0000);
+                self.envelope.direction = extract(val, 0b0000_1000);
+                self.envelope.pace = extract(val, 0b0000_0111);
                 self.dac_enabled = (val & 0b1111_1000) > 0;
                 if !self.dac_enabled {
                     self.enabled = false;
@@ -78,11 +72,9 @@ impl Channel for Ch2 {
                     if !self.dac_enabled {
                         self.enabled = false;
                     }
-                    self.envelope = 0;
 
+                    self.envelope.trigger();
                     self.length.trigger(64, div_apu);
-
-                    self.volume = self.initial_volume;
                 }
             }
             _ => unreachable!(),
@@ -103,8 +95,8 @@ impl Channel for Ch2 {
     }
 
     fn sample(&self) -> f32 {
-        if self.dac_enabled {
-            let volume = self.volume as f32 / 15.0;
+        if self.dac_enabled && self.enabled {
+            let volume = self.envelope.volume as f32 / 15.0;
             let duty = self.duty_cycle.sample() as f32 * 2.0 - 1.0;
             duty * volume
         } else {

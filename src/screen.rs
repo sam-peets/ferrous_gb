@@ -18,7 +18,7 @@ pub struct Debugger {
 }
 
 pub const MAX_AUDIO_BUFFER: usize = 2048;
-pub type ApuSamples = Arc<RwLock<VecDeque<f32>>>;
+pub type ApuSamples = Arc<RwLock<VecDeque<(f32, f32)>>>;
 
 pub struct Screen {
     pub cpu: Cpu,
@@ -201,12 +201,22 @@ where
 
     let chunks = output.chunks_mut(channels);
 
-    for (i, frame) in chunks.enumerate() {
-        let sample = samples.pop_front().unwrap_or_default();
-        let value: T = T::from_sample(sample);
+    for frame in chunks {
+        let (sample_left, sample_right) = samples.pop_front().unwrap_or_default();
 
-        for sample in frame.iter_mut() {
-            *sample = value;
+        match channels {
+            2 => {
+                let value_left: T = T::from_sample(sample_left);
+                let value_right: T = T::from_sample(sample_right);
+                frame[0] = value_left;
+                frame[1] = value_right;
+            }
+            _ => {
+                let value: T = T::from_sample((sample_left + sample_right) / 2.0);
+                for sample in frame.iter_mut() {
+                    *sample = value;
+                }
+            }
         }
     }
 }

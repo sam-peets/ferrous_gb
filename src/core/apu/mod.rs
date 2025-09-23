@@ -3,6 +3,7 @@ mod ch2;
 mod ch3;
 mod ch4;
 mod duty_cycle;
+pub mod envelope;
 mod length;
 
 use std::sync::{Arc, RwLock};
@@ -16,9 +17,8 @@ use crate::{
 };
 #[derive(Debug, Default)]
 pub struct Apu {
-    nr50: u8,       // master volume & vin panning
-    nr51: u8,       // sound panning
-    wave: [u8; 16], // wave pattern RAM (0xff30-ff3f)
+    nr50: u8, // master volume & vin panning
+    nr51: u8, // sound panning
 
     ch1: Ch1,
     ch2: Ch2,
@@ -82,7 +82,7 @@ impl Apu {
                         self.clear_regs();
                     }
                 }
-                0xff30..=0xff3f => self.wave[(addr - 0xff30) as usize] = val,
+                0xff30..=0xff3f => self.ch3.write(self.div_apu, addr, val, self.enabled),
                 _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
             };
         }
@@ -117,7 +117,7 @@ impl Apu {
                 let enabled = if self.enabled { 1 << 7 } else { 0 };
                 enabled | 0b0111_0000 | ch_enabled
             }
-            0xff30..=0xff3f => self.wave[(addr - 0xff30) as usize],
+            0xff30..=0xff3f => self.ch3.read(addr),
             _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
         };
         log::debug!("Apu: read: [{sys:04x?}] {addr:04x?} = {v:02x?}");
@@ -139,8 +139,8 @@ impl Apu {
         if sys % 4 == 0 {
             self.ch1.clock_fast();
             self.ch2.clock_fast();
-            // self.ch3.clock_fast();
-            // self.ch4.clock_fast();
+            self.ch3.clock_fast();
+            self.ch4.clock_fast();
         }
         if sys % (4194304 / self.sample_rate) as u16 == 0 {
             let mut cur_sample = self
@@ -170,16 +170,46 @@ impl Apu {
         self.div_apu = self.div_apu.wrapping_add(1) % 8;
     }
 
-    pub fn sample(&self) -> f32 {
-        // map values into the range -1..=1
+    pub fn sample(&self) -> (f32, f32) {
         let ch1_sample = self.ch1.sample();
         let ch2_sample = self.ch2.sample();
         let ch3_sample = self.ch3.sample();
         let ch4_sample = self.ch4.sample();
-        // let ch3_sample = (self.ch3.sample() as f32 / 15.0) * 2.0 - 1.0;
-        // let ch4_sample = (self.ch4.sample() as f32 / 15.0) * 2.0 - 1.0;
+        let left_volume = (self.nr50 & 0b0111_0000) >> 4;
+        let right_volume = self.nr50 & 0b0000_0111;
 
-        // TODO: use NR51/2 for mixing
-        (ch1_sample + ch2_sample + ch3_sample + ch4_sample) / 4.0
+        let left = {
+            let mut mix = 0.0;
+            if (self.nr51 & (1 << 7)) > 0 {
+                mix += ch4_sample
+            }
+            if (self.nr51 & (1 << 6)) > 0 {
+                mix += ch3_sample
+            }
+            if (self.nr51 & (1 << 5)) > 0 {
+                mix += ch2_sample
+            }
+            if (self.nr51 & (1 << 4)) > 0 {
+                mix += ch1_sample
+            }
+            mix * (left_volume + 1) as f32 / 8.0
+        };
+        let right = {
+            let mut mix = 0.0;
+            if (self.nr51 & (1 << 3)) > 0 {
+                mix += ch4_sample
+            }
+            if (self.nr51 & (1 << 2)) > 0 {
+                mix += ch3_sample
+            }
+            if (self.nr51 & (1 << 1)) > 0 {
+                mix += ch2_sample
+            }
+            if (self.nr51 & (1 << 0)) > 0 {
+                mix += ch1_sample
+            }
+            mix * (right_volume + 1) as f32 / 8.0
+        };
+        (left, right)
     }
 }

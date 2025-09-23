@@ -1,25 +1,53 @@
 use crate::core::{
-    apu::{Channel, length::Length},
+    apu::{Channel, envelope::Envelope, length::Length},
     util::extract,
 };
 
 #[derive(Debug, Default)]
 pub struct Ch4 {
-    // NR42
-    initial_volume: u8,
-    envelope_dir: u8,
-    envelope_pace: u8,
-
     // NR43
     clock_shift: u8,
     lfsr_width: u8,
     clock_divider: u8,
 
     pub enabled: bool,
-    envelope: u8,
-    volume: u8,
     dac_enabled: bool,
     length: Length<u8>,
+    lfsr: u16,
+    timer: usize,
+    envelope: Envelope,
+}
+
+impl Ch4 {
+    fn reset_timer(&mut self) {
+        let divisor = match self.clock_divider {
+            0 => 8,
+            1 => 16,
+            2 => 32,
+            3 => 48,
+            4 => 64,
+            5 => 80,
+            6 => 96,
+            7 => 112,
+            _ => unreachable!(),
+        } / 4;
+        self.timer = divisor << self.clock_shift;
+    }
+
+    fn update_lfsr(&mut self) {
+        let xnor = if (self.lfsr & 0b01) == ((self.lfsr & 0b10) >> 1) {
+            1
+        } else {
+            0
+        };
+        self.lfsr &= !(1 << 15);
+        self.lfsr |= xnor << 15;
+        if self.lfsr_width == 1 {
+            self.lfsr &= !(1 << 7);
+            self.lfsr |= xnor << 7;
+        }
+        self.lfsr >>= 1;
+    }
 }
 
 impl Channel for Ch4 {
@@ -41,9 +69,9 @@ impl Channel for Ch4 {
         match addr {
             0xff20 => 0xff,
             0xff21 => {
-                let volume = self.initial_volume << 4;
-                let dir = self.envelope_dir << 3;
-                let pace = self.envelope_pace;
+                let volume = self.envelope.initial_volume << 4;
+                let dir = self.envelope.direction << 3;
+                let pace = self.envelope.pace;
                 volume | dir | pace
             }
             0xff22 => {
@@ -70,9 +98,9 @@ impl Channel for Ch4 {
             }
             // NR42
             0xff21 => {
-                self.initial_volume = extract(val, 0b1111_0000);
-                self.envelope_dir = extract(val, 0b0000_1000);
-                self.envelope_pace = extract(val, 0b0000_0111);
+                self.envelope.initial_volume = extract(val, 0b1111_0000);
+                self.envelope.direction = extract(val, 0b0000_1000);
+                self.envelope.pace = extract(val, 0b0000_0111);
                 self.dac_enabled = (val & 0b1111_1000) > 0;
                 if !self.dac_enabled {
                     self.enabled = false;
@@ -91,11 +119,10 @@ impl Channel for Ch4 {
                     self.enabled = false;
                 }
                 if (val & 0b1000_0000) > 0 {
-                    self.envelope = 0;
-                    self.volume = self.initial_volume;
-
+                    self.envelope.trigger();
                     self.length.trigger(64, div_apu);
-                    // TODO: lfsr
+                    self.reset_timer();
+                    self.lfsr = 0;
 
                     self.enabled = true;
                     if !self.dac_enabled {
@@ -108,10 +135,22 @@ impl Channel for Ch4 {
     }
 
     fn sample(&self) -> f32 {
-        0.0
+        if self.dac_enabled && self.enabled {
+            let volume = self.envelope.volume as f32 / 15.0;
+            let sample = (self.lfsr & 1) as f32 * 2.0 - 1.0;
+            volume * sample
+        } else {
+            0.0
+        }
     }
 
     fn clock_fast(&mut self) {
-        todo!()
+        if self.enabled {
+            self.timer -= 1;
+            if self.timer == 0 {
+                self.reset_timer();
+                self.update_lfsr();
+            }
+        }
     }
 }

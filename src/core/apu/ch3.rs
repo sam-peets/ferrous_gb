@@ -17,6 +17,10 @@ pub struct Ch3 {
     pub enabled: bool,
     volume: u8,
     length: Length<u16>,
+    sample_index: usize,
+
+    wave: [u8; 16], // wave pattern RAM (0xff30-ff3f)
+    timer: u16,
 }
 
 impl Ch3 {}
@@ -31,6 +35,7 @@ impl Channel for Ch3 {
     fn clear(&mut self) {
         *self = Ch3 {
             length: self.length,
+            wave: self.wave,
             ..Default::default()
         };
         self.length.clear();
@@ -51,6 +56,14 @@ impl Channel for Ch3 {
             0xff1e => {
                 let length_enable = if self.length.enable { 1 << 6 } else { 0 };
                 length_enable | 0b1011_1111
+            }
+            0xff30..=0xff3f => {
+                self.wave[(addr - 0xff30) as usize]
+                // if self.enabled {
+                //     self.wave[self.sample_index / 2]
+                // } else {
+                //     self.wave[(addr - 0xff30) as usize]
+                // }
             }
 
             _ => unreachable!(),
@@ -88,20 +101,45 @@ impl Channel for Ch3 {
                     self.length.trigger(256, div_apu);
                     self.volume = self.initial_volume;
                     self.enabled = true;
+                    self.timer = 2048 - self.period;
                     if !self.dac_enabled {
                         self.enabled = false;
                     }
                 }
             }
+            0xff30..=0xff3f => self.wave[(addr - 0xff30) as usize] = val,
             _ => unreachable!(),
         }
     }
 
     fn sample(&self) -> f32 {
-        0.0
+        if self.dac_enabled && self.enabled {
+            let idx = self.sample_index / 2;
+            let sample = match self.sample_index % 2 {
+                0 => (self.wave[idx] & 0xf0) >> 4,
+                1 => self.wave[idx] & 0x0f,
+                _ => unreachable!(),
+            };
+            let shift = match self.volume {
+                0 => 4,
+                1 => 0,
+                2 => 1,
+                3 => 2,
+                _ => unreachable!(),
+            };
+            ((sample >> shift) as f32 / 15.0) * 2.0 - 1.0
+        } else {
+            0.0
+        }
     }
 
     fn clock_fast(&mut self) {
-        todo!()
+        if self.enabled {
+            self.timer += 1;
+            if self.timer > 0x7ff {
+                self.sample_index = (self.sample_index + 1) % 32;
+                self.timer = self.period;
+            }
+        }
     }
 }

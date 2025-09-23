@@ -30,7 +30,7 @@ impl eframe::App for TemplateApp {
                 let config = device.default_output_config().unwrap();
                 let sample_rate = config.sample_rate().0;
                 self.screen = Some(Screen::new(
-                    Cpu::new_fastboot(rom.clone(), sample_rate).unwrap(),
+                    Cpu::new(rom.clone(), sample_rate).unwrap(),
                     ctx,
                 ));
                 self.promise = None;
