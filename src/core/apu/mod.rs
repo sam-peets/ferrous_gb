@@ -9,7 +9,6 @@ mod length;
 use std::sync::{Arc, RwLock};
 
 use anyhow::anyhow;
-use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 use crate::{
     core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4},
@@ -30,7 +29,7 @@ pub struct Apu {
     sys_old: u16,
     pub cur_sample: ApuSamples,
     sample_rate: u32,
-    time_since_last_sample: u32,
+    capacitor: f32,
 }
 
 trait Channel {
@@ -124,9 +123,7 @@ impl Apu {
 
         Ok(v)
     }
-}
 
-impl Apu {
     pub fn new(sample_rate: u32) -> Self {
         Self {
             sample_rate,
@@ -143,11 +140,12 @@ impl Apu {
             self.ch4.clock_fast();
         }
         if sys % (4194304 / self.sample_rate) as u16 == 0 {
+            let sample = self.sample();
             let mut cur_sample = self
                 .cur_sample
                 .write()
                 .expect("Apu: failed to unlock current sample for writing");
-            cur_sample.push_back(self.sample());
+            cur_sample.push_back(sample);
         }
 
         // check for a falling edge
@@ -170,11 +168,25 @@ impl Apu {
         self.div_apu = self.div_apu.wrapping_add(1) % 8;
     }
 
-    pub fn sample(&self) -> (f32, f32) {
-        let ch1_sample = self.ch1.sample();
-        let ch2_sample = self.ch2.sample();
-        let ch3_sample = self.ch3.sample();
-        let ch4_sample = self.ch4.sample();
+    /// adapted from https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware
+    fn high_pass(&mut self, input: f32) -> f32 {
+        let mut out = 0.0;
+        if self.ch1.dac_enabled
+            || self.ch2.dac_enabled
+            || self.ch3.dac_enabled
+            || self.ch4.dac_enabled
+        {
+            out = input - self.capacitor;
+            self.capacitor = input - out * 0.999958_f32.powf(4194304.0 / self.sample_rate as f32);
+        }
+        out
+    }
+
+    pub fn sample(&mut self) -> (f32, f32) {
+        let ch1_sample = self.high_pass(self.ch1.sample());
+        let ch2_sample = self.high_pass(self.ch2.sample());
+        let ch3_sample = self.high_pass(self.ch3.sample());
+        let ch4_sample = self.high_pass(self.ch4.sample());
         let left_volume = (self.nr50 & 0b0111_0000) >> 4;
         let right_volume = self.nr50 & 0b0000_0111;
 

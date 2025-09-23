@@ -20,7 +20,7 @@ pub struct Buttons {
 #[derive(Debug, Clone, Copy)]
 pub enum Mode {
     HBlank = 0,
-    OamScan = 1,
-    Drawing = 2,
-    VBlank = 3,
+    VBlank = 1,
+    OamScan = 2,
+    Drawing = 3,
 }

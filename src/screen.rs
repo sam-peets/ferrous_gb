@@ -8,7 +8,6 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 use egui::{Color32, Key, TextureHandle, Vec2};
-use ringbuffer::{AllocRingBuffer, RingBuffer};
 
 use crate::core::{Buttons, cpu::Cpu};
 

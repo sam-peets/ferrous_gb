@@ -14,7 +14,7 @@ pub struct Ch1 {
     period: u16,
 
     pub enabled: bool,
-    dac_enabled: bool,
+    pub dac_enabled: bool,
 
     // internal sweep registers
     sweep_period_shadow: u16,

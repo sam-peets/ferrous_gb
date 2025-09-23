@@ -1,10 +1,11 @@
 use anyhow::anyhow;
 use std::fmt::Debug;
 
-use crate::core::mbc::{mbc1::Mbc1, mbc3::Mbc3, rom_only::RomOnly};
+use crate::core::mbc::{mbc1::Mbc1, mbc3::Mbc3, mbc5::Mbc5, rom_only::RomOnly};
 
 pub mod mbc1;
 pub mod mbc3;
+pub mod mbc5;
 pub mod rom_only;
 
 pub trait Mbc: Debug {
@@ -61,6 +62,8 @@ impl CartridgeHeader {
                 Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, true, true))
             }
             Mapper::Mbc3 => Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, false, false)),
+            Mapper::Mbc5 => Box::new(Mbc5::new(rom.clone(), rom_banks, ram_banks, false)),
+            Mapper::Mbc5RamBattery => Box::new(Mbc5::new(rom.clone(), rom_banks, ram_banks, true)),
             m => todo!("mmu: unimplemented mapper: {m:?}"),
         };
 
@@ -86,6 +89,8 @@ pub enum Mapper {
     Mbc3TimerRamBattery = 0x10,
     Mbc3 = 0x11,
     Mbc3RamBattery = 0x13,
+    Mbc5 = 0x19,
+    Mbc5RamBattery = 0x1b,
 }
 
 impl TryFrom<u8> for Mapper {
@@ -100,6 +105,8 @@ impl TryFrom<u8> for Mapper {
             0x10 => Ok(Mapper::Mbc3TimerRamBattery),
             0x11 => Ok(Mapper::Mbc3),
             0x13 => Ok(Mapper::Mbc3RamBattery),
+            0x19 => Ok(Mapper::Mbc5),
+            0x1b => Ok(Mapper::Mbc5RamBattery),
             _ => Err(anyhow!("unknown mapper: 0x{value:02x?}")),
         }
     }

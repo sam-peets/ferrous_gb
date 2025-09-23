@@ -6,7 +6,7 @@ use crate::core::{
 #[derive(Debug, Default)]
 pub struct Ch3 {
     // NR30
-    dac_enabled: bool,
+    pub dac_enabled: bool,
 
     // NR32
     initial_volume: u8,

@@ -9,7 +9,7 @@ pub struct Ch2 {
     period: u16,
 
     pub enabled: bool,
-    dac_enabled: bool,
+    pub dac_enabled: bool,
 
     duty_cycle: DutyCycle,
     length: Length<u8>,
@@ -83,6 +83,9 @@ impl Channel for Ch2 {
     fn clock(&mut self, div_apu: u8) {
         if div_apu % 2 == 0 && self.length.clock() {
             self.enabled = false
+        }
+        if div_apu == 7 {
+            self.envelope.clock();
         }
     }
 
