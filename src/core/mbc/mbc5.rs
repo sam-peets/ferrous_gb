@@ -29,7 +29,7 @@ impl Mbc for Mbc5 {
                     Ok(0xff)
                 }
             }
-            _ => Err(anyhow!("Mbc5: invalid read: {addr:04x?}")),
+            _ => Ok(0xff), // invalid read, return 0xff
         }
     }
 
@@ -69,7 +69,7 @@ impl Mbc for Mbc5 {
                     Ok(())
                 }
             }
-            _ => Err(anyhow!("Mbc5: invalid write: {addr:04x?}")),
+            _ => Ok(()), // invalid, discard the write
         }
     }
 }

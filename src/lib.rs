@@ -3,4 +3,4 @@
 mod app;
 mod core;
 mod screen;
-pub use app::TemplateApp;
+pub use app::GbApp;

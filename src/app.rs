@@ -3,14 +3,14 @@ use poll_promise::Promise;
 
 use crate::{core::cpu::Cpu, screen::Screen};
 
-pub struct TemplateApp {
+pub struct GbApp {
     promise: Option<Promise<Option<Vec<u8>>>>,
     screen: Option<Screen>,
 }
 
-impl TemplateApp {
+impl GbApp {
     pub fn new(_: &eframe::CreationContext<'_>) -> Self {
-        TemplateApp {
+        GbApp {
             promise: None,
             screen: None,
         }
@@ -19,7 +19,7 @@ impl TemplateApp {
 
 const TOBU: &[u8] = include_bytes!("../assets/roms/tobu.gb");
 
-impl eframe::App for TemplateApp {
+impl eframe::App for GbApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Some(promise) = &self.promise {
             if let Some(Some(rom)) = promise.ready() {
@@ -66,7 +66,9 @@ impl eframe::App for TemplateApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(screen) = &mut self.screen {
-                screen.ui(ui);
+                ui.vertical_centered(|ui| {
+                    screen.ui(ui);
+                });
             }
         });
 

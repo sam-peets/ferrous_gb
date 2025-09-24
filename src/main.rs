@@ -18,9 +18,9 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "eframe template",
+        "Ferrous GB",
         native_options,
-        Box::new(|cc| Ok(Box::new(gbrs::TemplateApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(gbrs::GbApp::new(cc)))),
     )
 }
 
@@ -30,7 +30,7 @@ fn main() {
     use eframe::wasm_bindgen::JsCast as _;
 
     // Redirect `log` message to `console.log` and friends:
-    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+    eframe::WebLogger::init(log::LevelFilter::Info).ok();
 
     let web_options = eframe::WebOptions::default();
 
@@ -50,7 +50,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(gbrs::TemplateApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(gbrs::GbApp::new(cc)))),
             )
             .await;
 

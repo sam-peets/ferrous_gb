@@ -222,16 +222,16 @@ impl Ppu {
                         mmu.ppu_mode = Mode::VBlank;
                         mmu.io.interrupt |= 0b00000001; // request vblank interrupt
                         self.window_y = 0;
-                        if (mmu.io.stat & 0b00010000) > 0 {
+                        if (mmu.io.stat & 0b0001_0000) > 0 {
                             // raise STAT interrupt for mode 1
-                            mmu.io.interrupt |= 0b00000010;
+                            mmu.io.interrupt |= 0b0000_0010;
                         }
                     } else {
                         mmu.ppu_mode = Mode::OamScan;
                         self.wx_condition = false;
-                        if (mmu.io.stat & 0b00100000) > 0 {
-                            // raise STAT interrupt for mode 1
-                            mmu.io.interrupt |= 0b00000010;
+                        if (mmu.io.stat & 0b0010_0000) > 0 {
+                            // raise STAT interrupt for mode 2
+                            mmu.io.interrupt |= 0b0000_0010;
                         }
                     }
                 }
@@ -346,9 +346,9 @@ impl Ppu {
                         self.window_y += 1;
                         self.window_y_update = false;
                     }
-                    if (mmu.io.stat & 0b00001000) > 0 {
+                    if (mmu.io.stat & 0b0000_1000) > 0 {
                         // raise STAT interrupt for mode 0
-                        mmu.io.interrupt |= 0b00000010;
+                        mmu.io.interrupt |= 0b0000_0010;
                     }
                 };
             }
@@ -358,9 +358,9 @@ impl Ppu {
                     mmu.ppu_mode = Mode::OamScan;
                     self.wy_condition = false;
                     self.window_y = 0;
-                    if (mmu.io.stat & 0b00100000) > 0 {
-                        // raise STAT interrupt for mode 1
-                        mmu.io.interrupt |= 0b00000010;
+                    if (mmu.io.stat & 0b0010_0000) > 0 {
+                        // raise STAT interrupt for mode 2
+                        mmu.io.interrupt |= 0b0000_0010;
                     }
                 }
             }
@@ -379,7 +379,7 @@ impl Ppu {
             // log::debug!("{} {} {}", mmu.io.stat, mmu.io.ly, mmu.io.lyc);
             if (mmu.io.stat & 0b0100_0000) > 0 && mmu.io.ly == mmu.io.lyc {
                 log::debug!("lyc interrupt");
-                mmu.io.interrupt |= 0b00000010;
+                mmu.io.interrupt |= 0b0000_0010;
             }
         }
 
