@@ -1,10 +1,12 @@
 # ferrous_gb
 
-`ferrous_gb` is a Gameboy emulator written in Rust targeting the web (through WASM) and native platforms.
+`ferrous_gb` is a WIP Gameboy emulator written in Rust targeting the web (through WASM) and native platforms.
 
 ## To Do
 
-- [ ] Finish APU/sound
+- [x] APU/sound
+- [ ] Polish APU/sound
+- [ ] Use M-cycle accurate memory reads on the CPU
 - [ ] More debugging tools
 
 ## Accuracy
