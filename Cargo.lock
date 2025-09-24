@@ -1129,6 +1129,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferrous-gb"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cpal",
+ "eframe",
+ "egui",
+ "env_logger",
+ "log",
+ "num-traits",
+ "poll-promise",
+ "rfd",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1260,23 +1277,6 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
-]
-
-[[package]]
-name = "gbrs"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cpal",
- "eframe",
- "egui",
- "env_logger",
- "log",
- "num-traits",
- "poll-promise",
- "rfd",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]

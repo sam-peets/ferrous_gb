@@ -41,31 +41,6 @@ impl Ppu {
             wx_condition: false,
         }
     }
-    // pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
-    //     let mut f = vec![0; 160 * 144];
-    //     let base = if (mmu.io.lcdc & 0b00010000) > 0 {
-    //         0x8000
-    //     } else {
-    //         0x8800
-    //     } as u16;
-    //     for x in 0..16 {
-    //         for y in 0..8 {
-    //             for line in 0..8 {
-    //                 let screen_base = (y * 8 + line) * 160 + x * 8;
-    //                 let vram_base = (x * y * 16) + line * 2;
-    //                 let b1 = mmu.read(base + vram_base)?;
-    //                 let b2 = mmu.read(base + vram_base + 1)?;
-    //                 for i in 0..=7 {
-    //                     let bit1 = bit(b1, 7 - i);
-    //                     let bit2 = bit(b2, 7 - i) << 1;
-    //                     f[(screen_base + i as u16) as usize] = bit1 | bit2;
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     Ok(f)
-    // }
 
     pub fn frame(&mut self, mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
         if (mmu.io.lcdc & 0b10000000) != 0 {

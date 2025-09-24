@@ -133,9 +133,6 @@ impl Screen {
         let min_size = ui.available_size();
         let target_size = min_size.min(max_size);
         ui.add(egui::Image::new(sized).fit_to_exact_size(target_size));
-        ui.checkbox(&mut self.cpu.logging, "logging enabled");
-        ui.label(format!("frame time: {}ms", self.last_frame));
-        ui.label(format!("lcdc: 0b{:08b}", self.cpu.mmu.io.lcdc));
 
         if self.debugger.show_vram {
             egui::Window::new("VRAM").show(ui.ctx(), |ui| {

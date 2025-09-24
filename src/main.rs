@@ -20,7 +20,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Ferrous GB",
         native_options,
-        Box::new(|cc| Ok(Box::new(gbrs::GbApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(ferrous_gb::GbApp::new(cc)))),
     )
 }
 
@@ -50,7 +50,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(gbrs::GbApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(ferrous_gb::GbApp::new(cc)))),
             )
             .await;
 

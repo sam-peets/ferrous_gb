@@ -1,4 +1,4 @@
-var cacheName = 'egui-template-pwa';
+var cacheName = 'ferrous-gb';
 var filesToCache = [
   './',
   './index.html',
