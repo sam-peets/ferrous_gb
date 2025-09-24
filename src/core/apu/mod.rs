@@ -177,16 +177,17 @@ impl Apu {
             || self.ch4.dac_enabled
         {
             out = input - self.capacitor;
-            self.capacitor = input - out * 0.999958_f32.powf(4194304.0 / self.sample_rate as f32);
+            self.capacitor =
+                input - out * 0.999958_f32.powf((4194304.0 / self.sample_rate as f32) / 2.0);
         }
         out
     }
 
     pub fn sample(&mut self) -> (f32, f32) {
-        let ch1_sample = self.high_pass(self.ch1.sample());
-        let ch2_sample = self.high_pass(self.ch2.sample());
-        let ch3_sample = self.high_pass(self.ch3.sample());
-        let ch4_sample = self.high_pass(self.ch4.sample());
+        let ch1_sample = self.ch1.sample();
+        let ch2_sample = self.ch2.sample();
+        let ch3_sample = self.ch3.sample();
+        let ch4_sample = self.ch4.sample();
         let left_volume = (self.nr50 & 0b0111_0000) >> 4;
         let right_volume = self.nr50 & 0b0000_0111;
 
@@ -204,7 +205,7 @@ impl Apu {
             if (self.nr51 & (1 << 4)) > 0 {
                 mix += ch1_sample
             }
-            mix * (left_volume + 1) as f32 / 8.0
+            self.high_pass(mix * (left_volume + 1) as f32 / 8.0)
         };
         let right = {
             let mut mix = 0.0;
@@ -220,7 +221,7 @@ impl Apu {
             if (self.nr51 & (1 << 0)) > 0 {
                 mix += ch1_sample
             }
-            mix * (right_volume + 1) as f32 / 8.0
+            self.high_pass(mix * (right_volume + 1) as f32 / 8.0)
         };
         (left, right)
     }
