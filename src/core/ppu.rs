@@ -64,7 +64,7 @@ impl Ppu {
         let tile_x = u16::from(dx / 8);
         let tile_y = u16::from(dy / 8);
 
-        let tile = mmu.read(bg_tilemap_base + (tile_y * 32 + tile_x))?;
+        let tile = mmu.read(bg_tilemap_base + (tile_y * 32 + tile_x));
 
         let tile_base = {
             if (mmu.io.lcdc & 0b0001_0000) > 0 {
@@ -78,9 +78,9 @@ impl Ppu {
         let tile_row = tile_base + 2 * u16::from(dy % 8);
         let tile_col_d = dx % 8;
 
-        let b1 = mmu.read(tile_row)?;
+        let b1 = mmu.read(tile_row);
         let b1 = bit(b1, 7 - tile_col_d);
-        let b2 = mmu.read(tile_row + 1)?;
+        let b2 = mmu.read(tile_row + 1);
         let b2 = bit(b2, 7 - tile_col_d);
         let color = (b2 << 1) | b1;
 
@@ -99,7 +99,7 @@ impl Ppu {
         let tile_x = u16::from(dx / 8);
         let tile_y = u16::from(dy / 8);
 
-        let tile = mmu.read(window_tilemap_base + (tile_y * 32 + tile_x))?;
+        let tile = mmu.read(window_tilemap_base + (tile_y * 32 + tile_x));
 
         let tile_base = {
             if (mmu.io.lcdc & 0b0001_0000) > 0 {
@@ -113,9 +113,9 @@ impl Ppu {
         let tile_row = tile_base + 2 * u16::from(dy % 8);
         let tile_col_d = dx % 8;
 
-        let b1 = mmu.read(tile_row)?;
+        let b1 = mmu.read(tile_row);
         let b1 = bit(b1, 7 - tile_col_d);
-        let b2 = mmu.read(tile_row + 1)?;
+        let b2 = mmu.read(tile_row + 1);
         let b2 = bit(b2, 7 - tile_col_d);
         let color = (b2 << 1) | b1;
 
@@ -161,9 +161,9 @@ impl Ppu {
             // TODO: this is mostly the same logic as draw_bg, extract this to a function
             let tile_base = vram_base + u16::from(tile) * 16;
             let tile_row = tile_base + 2 * u16::from(dy);
-            let b1 = mmu.read(tile_row)?;
+            let b1 = mmu.read(tile_row);
             let b1 = bit(b1, 7 - dx);
-            let b2 = mmu.read(tile_row + 1)?;
+            let b2 = mmu.read(tile_row + 1);
             let b2 = bit(b2, 7 - dx);
             let color = (b2 << 1) | b1;
 
@@ -210,7 +210,7 @@ impl Ppu {
                 if self.objects.len() == 10 {
                     break;
                 }
-                let y = mmu.read(OAM_BASE + i * 4)?;
+                let y = mmu.read(OAM_BASE + i * 4);
                 let ly = mmu.io.ly + 16; // object y pos is offset by 16
 
                 let height = if (mmu.io.lcdc & 0b0000_0100) != 0 {
@@ -228,9 +228,9 @@ impl Ppu {
                 // object is on the line, we should draw it
                 let obj = Object {
                     y,
-                    x: mmu.read(OAM_BASE + i * 4 + 1)?,
-                    tile: mmu.read(OAM_BASE + i * 4 + 2)?,
-                    attributes: mmu.read(OAM_BASE + i * 4 + 3)?,
+                    x: mmu.read(OAM_BASE + i * 4 + 1),
+                    tile: mmu.read(OAM_BASE + i * 4 + 2),
+                    attributes: mmu.read(OAM_BASE + i * 4 + 3),
                 };
                 self.objects.push(obj);
             }
@@ -384,8 +384,8 @@ impl Ppu {
                     for y in 0..8 {
                         let screen_base = bank * 16 * 8 * 64 + (tile_y * 8 + y) * 128 + tile_x * 8;
                         let vram_base = (tile_y * 16 * 16) + (tile_x * 16) + y * 2;
-                        let b1 = mmu.read(bank_base + vram_base)?;
-                        let b2 = mmu.read(bank_base + vram_base + 1)?;
+                        let b1 = mmu.read(bank_base + vram_base);
+                        let b2 = mmu.read(bank_base + vram_base + 1);
                         for x in 0..=7 {
                             let bit1 = bit(b1, 7 - x);
                             let bit2 = bit(b2, 7 - x) << 1;

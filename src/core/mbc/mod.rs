@@ -9,8 +9,8 @@ pub mod mbc5;
 pub mod rom_only;
 
 pub trait Mbc: Debug {
-    fn read(&self, addr: u16) -> anyhow::Result<u8>;
-    fn write(&mut self, addr: u16, val: u8) -> anyhow::Result<()>;
+    fn read(&self, addr: u16) -> u8;
+    fn write(&mut self, addr: u16, val: u8);
 }
 
 #[derive(Debug)]
@@ -52,8 +52,7 @@ impl CartridgeHeader {
 
         let mbc: Box<dyn Mbc> = match cartridge_type {
             Mapper::RomOnly => Box::new(RomOnly::try_from(rom)?),
-            Mapper::Mbc1 => Box::new(Mbc1::new(rom, rom_banks, ram_banks, false)),
-            Mapper::Mbc1Ram => Box::new(Mbc1::new(rom, rom_banks, ram_banks, false)),
+            Mapper::Mbc1 | Mapper::Mbc1Ram => Box::new(Mbc1::new(rom, rom_banks, ram_banks, false)),
             Mapper::Mbc1RamBattery => Box::new(Mbc1::new(rom, rom_banks, ram_banks, true)),
             Mapper::Mbc3RamBattery => Box::new(Mbc3::new(rom, rom_banks, ram_banks, true, false)),
             Mapper::Mbc3TimerRamBattery => {
@@ -62,7 +61,7 @@ impl CartridgeHeader {
             Mapper::Mbc3 => Box::new(Mbc3::new(rom, rom_banks, ram_banks, false, false)),
             Mapper::Mbc5 => Box::new(Mbc5::new(rom, rom_banks, ram_banks, false)),
             Mapper::Mbc5RamBattery => Box::new(Mbc5::new(rom, rom_banks, ram_banks, true)),
-            m => todo!("mmu: unimplemented mapper: {m:?}"),
+            _ => return Err(anyhow!("mmu: unimplemented mapper: {:?}", cartridge_type)),
         };
 
         let header = CartridgeHeader {

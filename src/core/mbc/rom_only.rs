@@ -1,5 +1,3 @@
-use anyhow::anyhow;
-
 use crate::core::mbc::Mbc;
 
 #[derive(Debug)]
@@ -19,24 +17,28 @@ impl TryFrom<&[u8]> for RomOnly {
 }
 
 impl Mbc for RomOnly {
-    fn read(&self, addr: u16) -> anyhow::Result<u8> {
+    fn read(&self, addr: u16) -> u8 {
         let addr = addr as usize;
         match addr {
-            0..=0x7fff => Ok(self.rom[addr]),
-            0xa000..=0xbfff => Ok(self.ram[addr - 0xa000]),
-            _ => Err(anyhow!("NoMapper: invalid read: 0x{addr:04x?}")),
+            0..=0x7fff => self.rom[addr],
+            0xa000..=0xbfff => self.ram[addr - 0xa000],
+            _ => {
+                log::warn!("NoMapper: invalid read: 0x{addr:04x?}");
+                0xff
+            }
         }
     }
 
-    fn write(&mut self, addr: u16, val: u8) -> anyhow::Result<()> {
+    fn write(&mut self, addr: u16, val: u8) {
         let addr = addr as usize;
         match addr {
-            0..=0x7fff => Ok(()), // do nothing
+            0..=0x7fff => (), // do nothing
             0xa000..=0xbfff => {
                 self.ram[addr - 0xa000] = val;
-                Ok(())
             }
-            _ => Err(anyhow!("NoMapper: invalid write: 0x{addr:04x?}")),
+            _ => {
+                log::warn!("NoMapper: invalid write: 0x{addr:04x?}");
+            }
         }
     }
 }

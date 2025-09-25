@@ -7,8 +7,6 @@ pub mod envelope;
 mod length;
 mod sweep;
 
-use anyhow::anyhow;
-
 use crate::{
     core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4},
     screen::ApuSamples,
@@ -23,6 +21,8 @@ pub struct Apu {
     ch3: Ch3,
     ch4: Ch4,
 
+    #[allow(clippy::struct_field_names)]
+    // ^ makes more sense, `div` is a name used elsewhere, div_apu is the name of the register
     div_apu: u8,
     enabled: bool,
     sys_old: u16,
@@ -53,7 +53,7 @@ impl Apu {
         self.nr50 = 0;
         self.nr51 = 0;
     }
-    pub fn write(&mut self, addr: u16, val: u8, sys: u16) -> anyhow::Result<()> {
+    pub fn write(&mut self, addr: u16, val: u8, sys: u16) {
         log::debug!("Apu: write: [{sys:04x?}] {addr:04x?} = {val:02x?}");
         if self.enabled
             || matches!(
@@ -82,13 +82,11 @@ impl Apu {
                         self.clear_regs();
                     }
                 }
-                _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
+                _ => log::warn!("Apu: invalid register write: {addr:04x?}"),
             }
         }
-
-        Ok(())
     }
-    pub fn read(&self, addr: u16, sys: u16) -> anyhow::Result<u8> {
+    pub fn read(&self, addr: u16, sys: u16) -> u8 {
         let v = match addr {
             0xff10..=0xff14 => self.ch1.read(addr),
             0xff16..=0xff19 => self.ch2.read(addr),
@@ -116,11 +114,13 @@ impl Apu {
                 let enabled = if self.enabled { 1 << 7 } else { 0 };
                 enabled | 0b0111_0000 | ch_enabled
             }
-            _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
+            _ => {
+                log::warn!("Apu: invalid register write: {addr:04x?}");
+                0xff
+            }
         };
         log::debug!("Apu: read: [{sys:04x?}] {addr:04x?} = {v:02x?}");
-
-        Ok(v)
+        v
     }
 
     pub fn new(sample_rate: u32) -> Self {

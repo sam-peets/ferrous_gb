@@ -52,18 +52,17 @@ impl Cpu {
         Ok(cpu)
     }
 
-    pub fn call_interrupt(&mut self, addr: u16, b: u8) -> anyhow::Result<()> {
+    pub fn call_interrupt(&mut self, addr: u16, b: u8) {
         self.mmu.io.interrupt &= !(1 << b);
         self.ime = false;
         self.mmu
-            .write(self.registers.sp.read() - 1, self.registers.pc.high.read())?;
+            .write(self.registers.sp.read() - 1, self.registers.pc.high.read());
         self.mmu
-            .write(self.registers.sp.read() - 2, self.registers.pc.low.read())?;
+            .write(self.registers.sp.read() - 2, self.registers.pc.low.read());
         self.registers.sp -= 2;
         self.registers.pc.write(addr);
         self.halted = false;
         self.delay += 5;
-        Ok(())
     }
 
     fn update_timer(&mut self) {
@@ -95,7 +94,7 @@ impl Cpu {
         }
     }
 
-    fn update_dma(&mut self) -> anyhow::Result<()> {
+    fn update_dma(&mut self) {
         if self.mmu.dma_requsted {
             self.dma_idx = 161; // TODO: verify
             self.mmu.dma_requsted = false;
@@ -109,44 +108,42 @@ impl Cpu {
             let offset = 160 - u16::from(self.dma_idx);
             let (src, _) = (u16::from(self.mmu.io.dma) << 8).overflowing_add(offset);
             let (dest, _) = 0xfe00u16.overflowing_add(offset); // 0xfe00 is the base address for OAM
-            self.mmu.write(dest, self.mmu.read(src)?)?;
+            self.mmu.write(dest, self.mmu.read(src));
             self.dma_idx -= 1;
             log::trace!("cycle: DMA: copied from 0x{src:04x?} to 0x{dest:04x?}");
         }
-        Ok(())
     }
 
-    fn cycle_interrupts(&mut self) -> anyhow::Result<()> {
+    fn cycle_interrupts(&mut self) {
         if self.ime && (self.mmu.ie & self.mmu.io.interrupt) > 0 {
             // interrupts are enabled and at least one has been requested
             log::debug!("interrupts are enabled and one has been requested");
             if (self.mmu.ie & self.mmu.io.interrupt & 0b0000_0001) > 0 {
                 // vblank
                 log::debug!("cycle: servicing vblank interrupt");
-                self.call_interrupt(0x40, 0)?;
+                self.call_interrupt(0x40, 0);
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b0000_0010) > 0 {
                 // lcd
                 log::debug!("cycle: servicing lcd interrupt");
-                self.call_interrupt(0x48, 1)?;
+                self.call_interrupt(0x48, 1);
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b0000_0100) > 0 {
                 // timer
                 log::debug!("cycle: servicing timer interrupt");
-                self.call_interrupt(0x50, 2)?;
+                self.call_interrupt(0x50, 2);
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b0000_1000) > 0 {
                 // serial
                 log::debug!("cycle: servicing serial interrupt");
-                self.call_interrupt(0x58, 3)?;
+                self.call_interrupt(0x58, 3);
             } else if (self.mmu.ie & self.mmu.io.interrupt & 0b0001_0000) > 0 {
                 // joypad
                 log::debug!("cycle: servicing joypad interrupt");
-                self.call_interrupt(0x60, 4)?;
+                self.call_interrupt(0x60, 4);
             }
         }
-        Ok(())
     }
 
-    fn execute_cb(&mut self) -> anyhow::Result<()> {
-        let opcode = self.mmu.read(self.registers.pc.read() + 1)?;
+    fn execute_cb(&mut self) {
+        let opcode = self.mmu.read(self.registers.pc.read() + 1);
         match opcode {
             0x40..=0x45
             | 0x47..=0x4d
@@ -212,19 +209,19 @@ impl Cpu {
 
     fn execute(&mut self, opcode: u8) -> anyhow::Result<()> {
         match opcode {
-            0x01 | 0x11 | 0x21 | 0x31 => self.ld_r16_u16(opcode)?,
-            0xa8..=0xad | 0xaf => self.xor_a_r8(opcode)?,
-            0x22 => self.ld_ptr_hli_a()?,
-            0x32 => self.ld_ptr_hld_a()?,
-            0x20 | 0x30 | 0x28 | 0x38 => self.jr_cond_i8(opcode)?,
-            0x06 | 0x16 | 0x26 | 0x0e | 0x1e | 0x2e | 0x3e => self.ld_r8_u8(opcode)?,
-            0xe2 => self.ld_ptr_ff00_c_a()?,
-            0x04 | 0x14 | 0x24 | 0x0c | 0x1c | 0x2c | 0x3c => self.inc_r8(opcode)?,
-            0x70..=0x75 | 0x77 => self.ld_ptr_hl_r(opcode)?,
-            0xe0 => self.ld_ptr_ff00_u8_a()?,
-            0x0a => self.ld_a_ptr_bc()?,
-            0x1a => self.ld_a_ptr_de()?,
-            0xcd => self.call_u16()?,
+            0x01 | 0x11 | 0x21 | 0x31 => self.ld_r16_u16(opcode),
+            0xa8..=0xad | 0xaf => self.xor_a_r8(opcode),
+            0x22 => self.ld_ptr_hli_a(),
+            0x32 => self.ld_ptr_hld_a(),
+            0x20 | 0x30 | 0x28 | 0x38 => self.jr_cond_i8(opcode),
+            0x06 | 0x16 | 0x26 | 0x0e | 0x1e | 0x2e | 0x3e => self.ld_r8_u8(opcode),
+            0xe2 => self.ld_ptr_ff00_c_a(),
+            0x04 | 0x14 | 0x24 | 0x0c | 0x1c | 0x2c | 0x3c => self.inc_r8(opcode),
+            0x70..=0x75 | 0x77 => self.ld_ptr_hl_r(opcode),
+            0xe0 => self.ld_ptr_ff00_u8_a(),
+            0x0a => self.ld_a_ptr_bc(),
+            0x1a => self.ld_a_ptr_de(),
+            0xcd => self.call_u16(),
             0x40..=0x45
             | 0x47..=0x4d
             | 0x4f
@@ -235,74 +232,74 @@ impl Cpu {
             | 0x67..=0x6d
             | 0x6f
             | 0x78..=0x7d
-            | 0x7f => self.ld_r8_r8(opcode)?,
-            0xc5 | 0xd5 | 0xe5 | 0xf5 => self.push_r16(opcode)?,
-            0xc1 | 0xd1 | 0xe1 | 0xf1 => self.pop_r16(opcode)?,
-            0x17 => self.rla()?,
-            0x05 | 0x15 | 0x25 | 0x0d | 0x1d | 0x2d | 0x3d => self.dec_r8(opcode)?,
-            0x03 | 0x13 | 0x23 | 0x33 => self.inc_r16(opcode)?,
-            0xc9 => self.ret()?,
-            0xfe => self.cp_a_u8()?,
-            0xea => self.ld_ptr_u16_a()?,
-            0x18 => self.jr_i8()?,
-            0xf0 => self.ld_a_ptr_ff00_u8()?,
-            0x90..=0x95 | 0x97 => self.sub_a_r8(opcode)?,
-            0xbe => self.cp_a_ptr_hl()?,
-            0x86 => self.add_a_ptr_hl()?,
-            0x00 => self.nop()?,
-            0xc3 => self.jp_u16()?,
-            0x2a => self.ld_a_ptr_hli()?,
-            0x3a => self.ld_a_ptr_hld()?,
-            0x02 => self.ld_ptr_bc_a()?,
-            0x12 => self.ld_ptr_de_a()?,
-            0xf3 => self.di()?,
-            0xfb => self.ei()?,
-            0x36 => self.ld_ptr_hl_u8()?,
-            0x0b | 0x1b | 0x2b | 0x3b => self.dec_r16(opcode)?,
-            0xb0..=0xb5 | 0xb7 => self.or_a_r8(opcode)?,
-            0x2f => self.cpl()?,
-            0xe6 => self.and_a_u8()?,
-            0xfa => self.ld_a_ptr_u16()?,
-            0xc4 | 0xd4 | 0xcc | 0xdc => self.call_cond_u16(opcode)?,
-            0xc6 => self.add_a_u8()?,
-            0xd6 => self.sub_a_u8()?,
-            0x46 | 0x56 | 0x66 | 0x4e | 0x5e | 0x6e | 0x7e => self.ld_r8_ptr_hl(opcode)?,
-            0xae => self.xor_a_ptr_hl()?,
-            0x1f => self.rra()?,
-            0xee => self.xor_a_u8()?,
-            0xce => self.adc_a_u8()?,
-            0xc0 | 0xd0 | 0xc8 | 0xd8 => self.ret_cond(opcode)?,
-            0xb6 => self.or_a_ptr_hl()?,
-            0x35 => self.dec_ptr_hl()?,
-            0x34 => self.inc_ptr_hl()?,
-            0x09 | 0x19 | 0x29 | 0x39 => self.add_hl_rr(opcode)?,
-            0xe9 => self.jp_hl()?,
-            0xa0..=0xa5 | 0xa7 => self.and_a_r8(opcode)?,
-            0xc7 | 0xd7 | 0xe7 | 0xf7 | 0xcf | 0xdf | 0xef | 0xff => self.rst(opcode)?,
-            0x80..=0x85 | 0x87 => self.add_a_r8(opcode)?,
-            0xf6 => self.or_a_u8()?,
-            0x08 => self.ld_ptr_u16_sp()?,
-            0xf9 => self.ld_sp_hl()?,
-            0xc2 | 0xd2 | 0xca | 0xda => self.jp_cond_u16(opcode)?,
-            0xd9 => self.reti()?,
-            0xe8 => self.add_sp_i8()?,
-            0xf8 => self.ld_hl_sp_i8()?,
-            0xb8..=0xbd | 0xbf => self.cp_a_r8(opcode)?,
-            0xde => self.sbc_a_u8()?,
-            0x37 => self.scf()?,
-            0x3f => self.ccf()?,
-            0x88..=0x8d | 0x8f => self.adc_a_r8(opcode)?,
-            0x98..=0x9d | 0x9f => self.sbc_a_r8(opcode)?,
-            0x07 => self.rlca()?,
-            0x0f => self.rrca()?,
-            0xf2 => self.ld_a_ptr_ff00_c()?,
-            0x8e => self.adc_a_ptr_hl()?,
-            0x96 => self.sub_a_ptr_hl()?,
-            0x9e => self.sbc_a_ptr_hl()?,
-            0xa6 => self.and_a_ptr_hl()?,
-            0x27 => self.daa()?,
-            0x76 => self.halt()?,
-            0xcb => self.execute_cb()?,
+            | 0x7f => self.ld_r8_r8(opcode),
+            0xc5 | 0xd5 | 0xe5 | 0xf5 => self.push_r16(opcode),
+            0xc1 | 0xd1 | 0xe1 | 0xf1 => self.pop_r16(opcode),
+            0x17 => self.rla(),
+            0x05 | 0x15 | 0x25 | 0x0d | 0x1d | 0x2d | 0x3d => self.dec_r8(opcode),
+            0x03 | 0x13 | 0x23 | 0x33 => self.inc_r16(opcode),
+            0xc9 => self.ret(),
+            0xfe => self.cp_a_u8(),
+            0xea => self.ld_ptr_u16_a(),
+            0x18 => self.jr_i8(),
+            0xf0 => self.ld_a_ptr_ff00_u8(),
+            0x90..=0x95 | 0x97 => self.sub_a_r8(opcode),
+            0xbe => self.cp_a_ptr_hl(),
+            0x86 => self.add_a_ptr_hl(),
+            0x00 => self.nop(),
+            0xc3 => self.jp_u16(),
+            0x2a => self.ld_a_ptr_hli(),
+            0x3a => self.ld_a_ptr_hld(),
+            0x02 => self.ld_ptr_bc_a(),
+            0x12 => self.ld_ptr_de_a(),
+            0xf3 => self.di(),
+            0xfb => self.ei(),
+            0x36 => self.ld_ptr_hl_u8(),
+            0x0b | 0x1b | 0x2b | 0x3b => self.dec_r16(opcode),
+            0xb0..=0xb5 | 0xb7 => self.or_a_r8(opcode),
+            0x2f => self.cpl(),
+            0xe6 => self.and_a_u8(),
+            0xfa => self.ld_a_ptr_u16(),
+            0xc4 | 0xd4 | 0xcc | 0xdc => self.call_cond_u16(opcode),
+            0xc6 => self.add_a_u8(),
+            0xd6 => self.sub_a_u8(),
+            0x46 | 0x56 | 0x66 | 0x4e | 0x5e | 0x6e | 0x7e => self.ld_r8_ptr_hl(opcode),
+            0xae => self.xor_a_ptr_hl(),
+            0x1f => self.rra(),
+            0xee => self.xor_a_u8(),
+            0xce => self.adc_a_u8(),
+            0xc0 | 0xd0 | 0xc8 | 0xd8 => self.ret_cond(opcode),
+            0xb6 => self.or_a_ptr_hl(),
+            0x35 => self.dec_ptr_hl(),
+            0x34 => self.inc_ptr_hl(),
+            0x09 | 0x19 | 0x29 | 0x39 => self.add_hl_rr(opcode),
+            0xe9 => self.jp_hl(),
+            0xa0..=0xa5 | 0xa7 => self.and_a_r8(opcode),
+            0xc7 | 0xd7 | 0xe7 | 0xf7 | 0xcf | 0xdf | 0xef | 0xff => self.rst(opcode),
+            0x80..=0x85 | 0x87 => self.add_a_r8(opcode),
+            0xf6 => self.or_a_u8(),
+            0x08 => self.ld_ptr_u16_sp(),
+            0xf9 => self.ld_sp_hl(),
+            0xc2 | 0xd2 | 0xca | 0xda => self.jp_cond_u16(opcode),
+            0xd9 => self.reti(),
+            0xe8 => self.add_sp_i8(),
+            0xf8 => self.ld_hl_sp_i8(),
+            0xb8..=0xbd | 0xbf => self.cp_a_r8(opcode),
+            0xde => self.sbc_a_u8(),
+            0x37 => self.scf(),
+            0x3f => self.ccf(),
+            0x88..=0x8d | 0x8f => self.adc_a_r8(opcode),
+            0x98..=0x9d | 0x9f => self.sbc_a_r8(opcode),
+            0x07 => self.rlca(),
+            0x0f => self.rrca(),
+            0xf2 => self.ld_a_ptr_ff00_c(),
+            0x8e => self.adc_a_ptr_hl(),
+            0x96 => self.sub_a_ptr_hl(),
+            0x9e => self.sbc_a_ptr_hl(),
+            0xa6 => self.and_a_ptr_hl(),
+            0x27 => self.daa(),
+            0x76 => self.halt(),
+            0xcb => self.execute_cb(),
             _ => {
                 return Err(anyhow!("cycle: unknown opcode: {opcode:x?}"));
             }
@@ -325,11 +322,11 @@ impl Cpu {
                 self.mmu.io.tima,
                 self.mmu.io.tac,
                 self.mmu.io.tma,
-                self.mmu.read(0xff04)?,
+                self.mmu.read(0xff04),
             );
         }
         self.update_timer();
-        self.update_dma()?;
+        self.update_dma();
 
         self.cycles += 1;
         match self.delay {
@@ -345,7 +342,7 @@ impl Cpu {
 
         log::trace!("cycle: cpu state: {:?}", self.registers);
 
-        self.cycle_interrupts()?;
+        self.cycle_interrupts();
 
         if self.halted {
             if (self.mmu.ie & self.mmu.io.interrupt) > 0 {
@@ -354,7 +351,7 @@ impl Cpu {
             return Ok(());
         }
 
-        let opcode = self.mmu.read(self.registers.pc.read())?;
+        let opcode = self.mmu.read(self.registers.pc.read());
         log::trace!(
             "cycle: opcode 0x{opcode:x?}, pc: 0x{:x?}",
             self.registers.pc.read()
@@ -372,11 +369,11 @@ impl Cpu {
                 self.registers.hl.low.read(),
                 self.registers.sp.read(),
                 self.registers.pc.read(),
-                self.mmu.read(self.registers.pc.read())?,
-                self.mmu.read(self.registers.pc.read() + 1)?,
-                self.mmu.read(self.registers.pc.read() + 2)?,
-                self.mmu.read(self.registers.pc.read() + 3)?,
-                self.mmu.read(self.registers.hl.read())?
+                self.mmu.read(self.registers.pc.read()),
+                self.mmu.read(self.registers.pc.read() + 1),
+                self.mmu.read(self.registers.pc.read() + 2),
+                self.mmu.read(self.registers.pc.read() + 3),
+                self.mmu.read(self.registers.hl.read()),
             );
         }
 
