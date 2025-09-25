@@ -5,6 +5,7 @@ mod ch4;
 mod duty_cycle;
 pub mod envelope;
 mod length;
+mod sweep;
 
 use std::sync::{Arc, RwLock};
 
