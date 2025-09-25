@@ -1,4 +1,6 @@
-var cacheName = 'ferrous-gb';
+var cacheVersion = '0.0.1'
+var cacheGroup = 'ferrous-gb';
+var cacheName = cacheVersion + '-' + cacheGroup;
 var filesToCache = [
   './',
   './index.html',
