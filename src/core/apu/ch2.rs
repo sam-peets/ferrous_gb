@@ -58,10 +58,10 @@ impl Channel for Ch2 {
                 }
             }
             0xff18 => {
-                self.period = (self.period & 0xff00) | val as u16;
+                self.period = (self.period & 0xff00) | u16::from(val);
             }
             0xff19 => {
-                self.period = ((val as u16 & 0b0000_0111) << 8) | self.period & 0xff;
+                self.period = ((u16::from(val) & 0b0000_0111) << 8) | self.period & 0xff;
                 let length_enable = (val & 0b0100_0000) > 0;
 
                 if self.length.write_nrx4(length_enable, div_apu) {
@@ -82,7 +82,7 @@ impl Channel for Ch2 {
     }
     fn clock(&mut self, div_apu: u8) {
         if div_apu % 2 == 0 && self.length.clock() {
-            self.enabled = false
+            self.enabled = false;
         }
         if div_apu == 7 {
             self.envelope.clock();
@@ -99,8 +99,8 @@ impl Channel for Ch2 {
 
     fn sample(&self) -> f32 {
         if self.dac_enabled && self.enabled {
-            let volume = self.envelope.volume as f32 / 15.0;
-            let duty = self.duty_cycle.sample() as f32 * 2.0 - 1.0;
+            let volume = f32::from(self.envelope.volume) / 15.0;
+            let duty = f32::from(self.duty_cycle.sample()) * 2.0 - 1.0;
             duty * volume
         } else {
             0.0

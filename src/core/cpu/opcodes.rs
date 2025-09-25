@@ -2,9 +2,9 @@ use crate::core::cpu::{Cpu, register::Register};
 
 impl Cpu {
     pub fn ld_r16_u16(&mut self, opcode: u8) -> anyhow::Result<()> {
-        let reg = (opcode & 0b00110000) >> 4;
-        let arg_high = self.mmu.read(self.registers.pc.read() + 2)? as u16;
-        let arg_low = self.mmu.read(self.registers.pc.read() + 1)? as u16;
+        let reg = (opcode & 0b0011_0000) >> 4;
+        let arg_high = u16::from(self.mmu.read(self.registers.pc.read() + 2)?);
+        let arg_low = u16::from(self.mmu.read(self.registers.pc.read() + 1)?);
         let arg = (arg_high << 8) | arg_low;
         log::trace!("ld_r16_u16: {arg:x?}");
         self.registers.get_r16_ss(reg).write(arg);

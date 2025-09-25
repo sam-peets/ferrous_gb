@@ -35,11 +35,7 @@ impl Ch4 {
     }
 
     fn update_lfsr(&mut self) {
-        let xnor = if (self.lfsr & 0b01) == ((self.lfsr & 0b10) >> 1) {
-            1
-        } else {
-            0
-        };
+        let xnor = u16::from((self.lfsr & 0b01) == ((self.lfsr & 0b10) >> 1));
         self.lfsr &= !(1 << 15);
         self.lfsr |= xnor << 15;
         if self.lfsr_width == 1 {
@@ -92,7 +88,7 @@ impl Channel for Ch4 {
     }
 
     fn write(&mut self, div_apu: u8, addr: u16, val: u8, _: bool) {
-        // println!("Ch4: write: {addr:04x?} = {val:02x?}");
+        println!("Ch4: write: {addr:04x?} = {val:02x?}");
         match addr {
             // NR41
             0xff20 => {
@@ -118,7 +114,7 @@ impl Channel for Ch4 {
             // NR44
             0xff23 => {
                 let length_enable = (val & 0b0100_0000) > 0;
-                // println!("ch4: trigger: {val:08b}");
+                println!("ch4: trigger: {val:08b}");
                 if self.length.write_nrx4(length_enable, div_apu) {
                     self.enabled = false;
                 }
@@ -140,8 +136,8 @@ impl Channel for Ch4 {
 
     fn sample(&self) -> f32 {
         if self.dac_enabled && self.enabled {
-            let volume = self.envelope.volume as f32 / 15.0;
-            let sample = (self.lfsr & 1) as f32 * 2.0 - 1.0;
+            let volume = f32::from(self.envelope.volume) / 15.0;
+            let sample = f32::from(self.lfsr & 1) * 2.0 - 1.0;
             volume * sample
         } else {
             0.0

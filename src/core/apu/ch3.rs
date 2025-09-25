@@ -47,12 +47,11 @@ impl Channel for Ch3 {
                 let dac_enabled = if self.dac_enabled { 1 << 7 } else { 0 };
                 dac_enabled | 0b0111_1111
             }
-            0xff1b => 0xff, // write-only
             0xff1c => {
                 let initial_volume = self.initial_volume << 5;
                 initial_volume | 0b1001_1111
             }
-            0xff1d => 0xff,
+            0xff1b | 0xff1d => 0xff, // write-only
             0xff1e => {
                 let length_enable = if self.length.enable { 1 << 6 } else { 0 };
                 length_enable | 0b1011_1111
@@ -80,17 +79,17 @@ impl Channel for Ch3 {
                 }
             }
             0xff1b => {
-                self.length.length = 256 - (val as u16);
+                self.length.length = 256 - u16::from(val);
                 log::debug!("Ch3: write length: {}", self.length.length);
             }
             0xff1c => {
                 self.initial_volume = extract(val, 0b0110_0000);
             }
             0xff1d => {
-                self.period = (self.period & 0xff00) | val as u16;
+                self.period = (self.period & 0xff00) | u16::from(val);
             }
             0xff1e => {
-                self.period = (self.period & 0x00ff) | (((val & 0b0000_0111) as u16) << 8);
+                self.period = (self.period & 0x00ff) | (u16::from(val & 0b0000_0111) << 8);
                 let length_enable = (val & 0b0100_0000) > 0;
 
                 if self.length.write_nrx4(length_enable, div_apu) {
@@ -127,7 +126,7 @@ impl Channel for Ch3 {
                 3 => 2,
                 _ => unreachable!(),
             };
-            ((sample >> shift) as f32 / 15.0) * 2.0 - 1.0
+            (f32::from(sample >> shift) / 15.0) * 2.0 - 1.0
         } else {
             0.0
         }

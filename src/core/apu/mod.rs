@@ -7,8 +7,6 @@ pub mod envelope;
 mod length;
 mod sweep;
 
-use std::sync::{Arc, RwLock};
-
 use anyhow::anyhow;
 
 use crate::{
@@ -67,7 +65,9 @@ impl Apu {
             match addr {
                 0xff10..=0xff14 => self.ch1.write(self.div_apu, addr, val, self.enabled),
                 0xff16..=0xff19 => self.ch2.write(self.div_apu, addr, val, self.enabled),
-                0xff1a..=0xff1e => self.ch3.write(self.div_apu, addr, val, self.enabled),
+                0xff1a..=0xff1e | 0xff30..=0xff3f => {
+                    self.ch3.write(self.div_apu, addr, val, self.enabled);
+                }
                 0xff20..=0xff23 => self.ch4.write(self.div_apu, addr, val, self.enabled),
                 0xff24 => self.nr50 = val,
                 0xff25 => self.nr51 = val,
@@ -82,9 +82,8 @@ impl Apu {
                         self.clear_regs();
                     }
                 }
-                0xff30..=0xff3f => self.ch3.write(self.div_apu, addr, val, self.enabled),
                 _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
-            };
+            }
         }
 
         Ok(())
@@ -93,7 +92,7 @@ impl Apu {
         let v = match addr {
             0xff10..=0xff14 => self.ch1.read(addr),
             0xff16..=0xff19 => self.ch2.read(addr),
-            0xff1a..=0xff1e => self.ch3.read(addr),
+            0xff1a..=0xff1e | 0xff30..=0xff3f => self.ch3.read(addr),
             0xff20..=0xff23 => self.ch4.read(addr),
             0xff24 => self.nr50,
             0xff25 => self.nr51,
@@ -101,23 +100,22 @@ impl Apu {
                 let ch_enabled = {
                     let mut enabled = 0;
                     if self.ch1.enabled {
-                        enabled |= 0b1
+                        enabled |= 0b1;
                     }
                     if self.ch2.enabled {
-                        enabled |= 0b1 << 1
+                        enabled |= 0b1 << 1;
                     }
                     if self.ch3.enabled {
-                        enabled |= 0b1 << 2
+                        enabled |= 0b1 << 2;
                     }
                     if self.ch4.enabled {
-                        enabled |= 0b1 << 3
+                        enabled |= 0b1 << 3;
                     }
                     enabled
                 };
                 let enabled = if self.enabled { 1 << 7 } else { 0 };
                 enabled | 0b0111_0000 | ch_enabled
             }
-            0xff30..=0xff3f => self.ch3.read(addr),
             _ => return Err(anyhow!("Apu: invalid register write: {addr:04x?}")),
         };
         log::debug!("Apu: read: [{sys:04x?}] {addr:04x?} = {v:02x?}");
@@ -169,7 +167,7 @@ impl Apu {
         self.div_apu = self.div_apu.wrapping_add(1) % 8;
     }
 
-    /// adapted from https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware
+    /// adapted from <https://gbdev.gg8.se/wiki/articles/Gameboy_sound_hardware>
     fn high_pass(&mut self, input: f32) -> f32 {
         let mut out = 0.0;
         if self.ch1.dac_enabled
@@ -179,7 +177,7 @@ impl Apu {
         {
             out = input - self.capacitor;
             self.capacitor =
-                input - out * 0.999958_f32.powf((4194304.0 / self.sample_rate as f32) / 2.0);
+                input - out * 0.999_958_f32.powf((4_194_304.0 / self.sample_rate as f32) / 2.0);
         }
         out
     }
@@ -195,34 +193,34 @@ impl Apu {
         let left = {
             let mut mix = 0.0;
             if (self.nr51 & (1 << 7)) > 0 {
-                mix += ch4_sample
+                mix += ch4_sample;
             }
             if (self.nr51 & (1 << 6)) > 0 {
-                mix += ch3_sample
+                mix += ch3_sample;
             }
             if (self.nr51 & (1 << 5)) > 0 {
-                mix += ch2_sample
+                mix += ch2_sample;
             }
             if (self.nr51 & (1 << 4)) > 0 {
-                mix += ch1_sample
+                mix += ch1_sample;
             }
-            self.high_pass(mix * (left_volume + 1) as f32 / 8.0)
+            self.high_pass(mix * f32::from(left_volume + 1) / 8.0)
         };
         let right = {
             let mut mix = 0.0;
             if (self.nr51 & (1 << 3)) > 0 {
-                mix += ch4_sample
+                mix += ch4_sample;
             }
             if (self.nr51 & (1 << 2)) > 0 {
-                mix += ch3_sample
+                mix += ch3_sample;
             }
             if (self.nr51 & (1 << 1)) > 0 {
-                mix += ch2_sample
+                mix += ch2_sample;
             }
             if (self.nr51 & (1 << 0)) > 0 {
-                mix += ch1_sample
+                mix += ch1_sample;
             }
-            self.high_pass(mix * (right_volume + 1) as f32 / 8.0)
+            self.high_pass(mix * f32::from(right_volume + 1) / 8.0)
         };
         (left, right)
     }

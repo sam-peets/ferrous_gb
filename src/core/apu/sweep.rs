@@ -10,8 +10,11 @@ pub struct Sweep {
     pub used_negative: bool,
 }
 
+/// Functions here are annotated with `must_use` as they return necessary updates to
+/// be made to the parent channel.
 impl Sweep {
-    /// Returns a 2-tuple describing
+    /// Returns a 2-tuple, first element is an optional update to the channel period,
+    /// second element is an optional update to the channel enabled flag
     #[must_use]
     pub fn clock(&mut self, enabled: bool) -> (Option<u16>, Option<bool>) {
         let ret = if enabled && self.pace != 0 && self.enabled && self.timer == 0 {
@@ -55,7 +58,8 @@ impl Sweep {
         };
         ret
     }
-    //
+    /// Returns a 2-tuple, first element is the new period after the overflowcheck,
+    /// second element is an optional update to the channel enabled flag
     #[must_use]
     pub fn overflow_check(&mut self) -> (u16, Option<bool>) {
         log::debug!(
@@ -82,6 +86,8 @@ impl Sweep {
         }
     }
 
+    // Returns an optional update to the channel enabled flag
+    #[must_use]
     pub fn trigger(&mut self, period: u16) -> Option<bool> {
         self.used_negative = false;
         self.period_shadow = period;

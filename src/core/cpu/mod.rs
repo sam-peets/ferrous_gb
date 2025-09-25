@@ -66,31 +66,15 @@ impl Cpu {
         Ok(())
     }
 
-    pub fn cycle(&mut self) -> anyhow::Result<()> {
-        if self.mmu.sys % 4 != 0 {
-            // only clock the cpu on an m-cycle
-            return Ok(());
-        }
-        if self.logging {
-            println!(
-                "SYS: {} IME: {} IE: {:x?} IF: {:x?} TIMA: {:x?} TAC: {:x?} TMA: {:x?} DIV: {:x?}",
-                self.mmu.sys,
-                self.ime,
-                self.mmu.ie,
-                self.mmu.io.interrupt,
-                self.mmu.io.tima,
-                self.mmu.io.tac,
-                self.mmu.io.tma,
-                self.mmu.read(0xff04)?,
-            );
-        }
+    fn update_timer(&mut self) {
+        // TODO: it would be nice to extract timer logic to a struct
         if self.timer_overflow {
             // should be delayed by one m-cycle
-            self.mmu.io.interrupt |= 0b00000100;
+            self.mmu.io.interrupt |= 0b0000_0100;
             self.mmu.io.tima = self.mmu.io.tma;
             self.timer_overflow = false;
         }
-        if (self.mmu.io.tac & 0b00000100) > 0 {
+        if (self.mmu.io.tac & 0b0000_0100) > 0 {
             // timer is enabled, tick it
             let interval = match self.mmu.io.tac & 0b0000_0011 {
                 0b00 => 1024,
@@ -109,98 +93,124 @@ impl Cpu {
                 }
             }
         }
+    }
 
+    fn update_dma(&mut self) -> anyhow::Result<()> {
         if self.mmu.dma_requsted {
             self.dma_idx = 161; // TODO: verify
             self.mmu.dma_requsted = false;
-            log::debug!("cycle: DMA: starting transfer")
+            log::debug!("cycle: DMA: starting transfer");
         }
 
         if self.dma_idx > 160 {
             // apparently there's 2 delay cycles
             self.dma_idx -= 1;
         } else if self.dma_idx > 0 {
-            let offset = 160 - self.dma_idx as u16;
-            let (src, _) = ((self.mmu.io.dma as u16) << 8).overflowing_add(offset);
+            let offset = 160 - u16::from(self.dma_idx);
+            let (src, _) = (u16::from(self.mmu.io.dma) << 8).overflowing_add(offset);
             let (dest, _) = 0xfe00u16.overflowing_add(offset); // 0xfe00 is the base address for OAM
             self.mmu.write(dest, self.mmu.read(src)?)?;
             self.dma_idx -= 1;
             log::trace!("cycle: DMA: copied from 0x{src:04x?} to 0x{dest:04x?}");
         }
+        Ok(())
+    }
 
-        self.cycles += 1;
-        match self.delay {
-            0 => {}
-            1 => {
-                self.delay -= 1;
-            }
-            _ => {
-                self.delay -= 1;
-                return Ok(());
-            }
-        }
-
-        log::trace!("cycle: cpu state: {:?}", self.registers);
-
+    fn cycle_interrupts(&mut self) -> anyhow::Result<()> {
         if self.ime && (self.mmu.ie & self.mmu.io.interrupt) > 0 {
             // interrupts are enabled and at least one has been requested
             log::debug!("interrupts are enabled and one has been requested");
-            if (self.mmu.ie & self.mmu.io.interrupt & 0b00000001) > 0 {
+            if (self.mmu.ie & self.mmu.io.interrupt & 0b0000_0001) > 0 {
                 // vblank
                 log::debug!("cycle: servicing vblank interrupt");
                 self.call_interrupt(0x40, 0)?;
-            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00000010) > 0 {
+            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b0000_0010) > 0 {
                 // lcd
                 log::debug!("cycle: servicing lcd interrupt");
                 self.call_interrupt(0x48, 1)?;
-            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00000100) > 0 {
+            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b0000_0100) > 0 {
                 // timer
                 log::debug!("cycle: servicing timer interrupt");
                 self.call_interrupt(0x50, 2)?;
-            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00001000) > 0 {
+            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b0000_1000) > 0 {
                 // serial
                 log::debug!("cycle: servicing serial interrupt");
                 self.call_interrupt(0x58, 3)?;
-            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b00010000) > 0 {
+            } else if (self.mmu.ie & self.mmu.io.interrupt & 0b0001_0000) > 0 {
                 // joypad
                 log::debug!("cycle: servicing joypad interrupt");
                 self.call_interrupt(0x60, 4)?;
             }
         }
+        Ok(())
+    }
 
-        if self.halted {
-            if (self.mmu.ie & self.mmu.io.interrupt) > 0 {
-                self.halted = false;
-            }
-            return Ok(());
+    fn execute_cb(&mut self) -> anyhow::Result<()> {
+        let opcode = self.mmu.read(self.registers.pc.read() + 1)?;
+        match opcode {
+            0x40..=0x45
+            | 0x47..=0x4d
+            | 0x4f
+            | 0x50..=0x55
+            | 0x57..=0x5d
+            | 0x5f
+            | 0x60..=0x65
+            | 0x67..=0x6d
+            | 0x6f
+            | 0x70..=0x75
+            | 0x77..=0x7d
+            | 0x7f => self.bit_b_r8(opcode),
+            0x10..=0x15 | 0x17 => self.rl_r8(opcode),
+            0x18..=0x1d | 0x1f => self.rr_r8(opcode),
+            0x30..=0x35 | 0x37 => self.swap_r8(opcode),
+            0x38..=0x3d | 0x3f => self.srl_r8(opcode),
+            0xc0..=0xc5
+            | 0xc7
+            | 0xd0..=0xd5
+            | 0xd7
+            | 0xe0..=0xe5
+            | 0xe7
+            | 0xf0..=0xf5
+            | 0xf7
+            | 0xc8..=0xcd
+            | 0xcf
+            | 0xd8..=0xdd
+            | 0xdf
+            | 0xe8..=0xed
+            | 0xef
+            | 0xf8..=0xfd
+            | 0xff => self.set_b_r8(opcode),
+            0xc6 | 0xd6 | 0xe6 | 0xf6 | 0xce | 0xde | 0xee | 0xfe => self.set_b_ptr_hl(opcode),
+            0x00..=0x05 | 0x07 => self.rlc_r8(opcode),
+            0x20..=0x25 | 0x27 => self.sla_r8(opcode),
+            0x08..=0x0d | 0x0f => self.rrc_r8(opcode),
+            0x28..=0x2d | 0x2f => self.sra_r8(opcode),
+            0x80..=0x85
+            | 0x87..=0x8d
+            | 0x8f
+            | 0x90..=0x95
+            | 0x97..=0x9d
+            | 0x9f
+            | 0xa0..=0xa5
+            | 0xa7..=0xad
+            | 0xaf
+            | 0xb0..=0xb5
+            | 0xb7..=0xbd
+            | 0xbf => self.res_b_r8(opcode),
+            0x06 => self.rlc_ptr_hl(),
+            0x0e => self.rrc_ptr_hl(),
+            0x16 => self.rl_ptr_hl(),
+            0x1e => self.rr_ptr_hl(),
+            0x26 => self.sla_ptr_hl(),
+            0x2e => self.sra_ptr_hl(),
+            0x36 => self.swap_ptr_hl(),
+            0x3e => self.srl_ptr_hl(),
+            0x46 | 0x4e | 0x56 | 0x5e | 0x66 | 0x6e | 0x76 | 0x7e => self.bit_b_ptr_hl(opcode),
+            0x86 | 0x8e | 0x96 | 0x9e | 0xa6 | 0xae | 0xb6 | 0xbe => self.res_b_ptr_hl(opcode),
         }
+    }
 
-        let opcode = self.mmu.read(self.registers.pc.read())?;
-        log::trace!(
-            "cycle: opcode 0x{opcode:x?}, pc: 0x{:x?}",
-            self.registers.pc.read()
-        );
-        if self.logging {
-            println!(
-                "A: {:02X?} F: {:02X?} B: {:02X?} C: {:02X?} D: {:02X?} E: {:02X?} H: {:02X?} L: {:02X?} SP: {:04X?} PC: 00:{:04X?} ({:02X?} {:02X?} {:02X?} {:02X?}) (HL): {:02X?}",
-                self.registers.af.high.read(),
-                self.registers.af.low.read(),
-                self.registers.bc.high.read(),
-                self.registers.bc.low.read(),
-                self.registers.de.high.read(),
-                self.registers.de.low.read(),
-                self.registers.hl.high.read(),
-                self.registers.hl.low.read(),
-                self.registers.sp.read(),
-                self.registers.pc.read(),
-                self.mmu.read(self.registers.pc.read())?,
-                self.mmu.read(self.registers.pc.read() + 1)?,
-                self.mmu.read(self.registers.pc.read() + 2)?,
-                self.mmu.read(self.registers.pc.read() + 3)?,
-                self.mmu.read(self.registers.hl.read())?
-            );
-        }
-
+    fn execute(&mut self, opcode: u8) -> anyhow::Result<()> {
         match opcode {
             0x01 | 0x11 | 0x21 | 0x31 => self.ld_r16_u16(opcode)?,
             0xa8..=0xad | 0xaf => self.xor_a_r8(opcode)?,
@@ -292,80 +302,86 @@ impl Cpu {
             0xa6 => self.and_a_ptr_hl()?,
             0x27 => self.daa()?,
             0x76 => self.halt()?,
-            0xcb => {
-                let opcode = self.mmu.read(self.registers.pc.read() + 1)?;
-                match opcode {
-                    0x40..=0x45
-                    | 0x47..=0x4d
-                    | 0x4f
-                    | 0x50..=0x55
-                    | 0x57..=0x5d
-                    | 0x5f
-                    | 0x60..=0x65
-                    | 0x67..=0x6d
-                    | 0x6f
-                    | 0x70..=0x75
-                    | 0x77..=0x7d
-                    | 0x7f => self.bit_b_r8(opcode),
-                    0x10..=0x15 | 0x17 => self.rl_r8(opcode),
-                    0x18..=0x1d | 0x1f => self.rr_r8(opcode),
-                    0x30..=0x35 | 0x37 => self.swap_r8(opcode),
-                    0x38..=0x3d | 0x3f => self.srl_r8(opcode),
-                    0xc0..=0xc5
-                    | 0xc7
-                    | 0xd0..=0xd5
-                    | 0xd7
-                    | 0xe0..=0xe5
-                    | 0xe7
-                    | 0xf0..=0xf5
-                    | 0xf7
-                    | 0xc8..=0xcd
-                    | 0xcf
-                    | 0xd8..=0xdd
-                    | 0xdf
-                    | 0xe8..=0xed
-                    | 0xef
-                    | 0xf8..=0xfd
-                    | 0xff => self.set_b_r8(opcode),
-                    0xc6 | 0xd6 | 0xe6 | 0xf6 | 0xce | 0xde | 0xee | 0xfe => {
-                        self.set_b_ptr_hl(opcode)
-                    }
-                    0x00..=0x05 | 0x07 => self.rlc_r8(opcode),
-                    0x20..=0x25 | 0x27 => self.sla_r8(opcode),
-                    0x08..=0x0d | 0x0f => self.rrc_r8(opcode),
-                    0x28..=0x2d | 0x2f => self.sra_r8(opcode),
-                    0x80..=0x85
-                    | 0x87..=0x8d
-                    | 0x8f
-                    | 0x90..=0x95
-                    | 0x97..=0x9d
-                    | 0x9f
-                    | 0xa0..=0xa5
-                    | 0xa7..=0xad
-                    | 0xaf
-                    | 0xb0..=0xb5
-                    | 0xb7..=0xbd
-                    | 0xbf => self.res_b_r8(opcode),
-                    0x06 => self.rlc_ptr_hl(),
-                    0x0e => self.rrc_ptr_hl(),
-                    0x16 => self.rl_ptr_hl(),
-                    0x1e => self.rr_ptr_hl(),
-                    0x26 => self.sla_ptr_hl(),
-                    0x2e => self.sra_ptr_hl(),
-                    0x36 => self.swap_ptr_hl(),
-                    0x3e => self.srl_ptr_hl(),
-                    0x46 | 0x4e | 0x56 | 0x5e | 0x66 | 0x6e | 0x76 | 0x7e => {
-                        self.bit_b_ptr_hl(opcode)
-                    }
-                    0x86 | 0x8e | 0x96 | 0x9e | 0xa6 | 0xae | 0xb6 | 0xbe => {
-                        self.res_b_ptr_hl(opcode)
-                    }
-                }
-            }?,
+            0xcb => self.execute_cb()?,
             _ => {
                 return Err(anyhow!("cycle: unknown opcode: {opcode:x?}"));
             }
         }
+        Ok(())
+    }
+
+    pub fn cycle(&mut self) -> anyhow::Result<()> {
+        if self.mmu.sys % 4 != 0 {
+            // only clock the cpu on an m-cycle
+            return Ok(());
+        }
+        if self.logging {
+            println!(
+                "SYS: {} IME: {} IE: {:x?} IF: {:x?} TIMA: {:x?} TAC: {:x?} TMA: {:x?} DIV: {:x?}",
+                self.mmu.sys,
+                self.ime,
+                self.mmu.ie,
+                self.mmu.io.interrupt,
+                self.mmu.io.tima,
+                self.mmu.io.tac,
+                self.mmu.io.tma,
+                self.mmu.read(0xff04)?,
+            );
+        }
+        self.update_timer();
+        self.update_dma()?;
+
+        self.cycles += 1;
+        match self.delay {
+            0 => {}
+            1 => {
+                self.delay -= 1;
+            }
+            _ => {
+                self.delay -= 1;
+                return Ok(());
+            }
+        }
+
+        log::trace!("cycle: cpu state: {:?}", self.registers);
+
+        self.cycle_interrupts()?;
+
+        if self.halted {
+            if (self.mmu.ie & self.mmu.io.interrupt) > 0 {
+                self.halted = false;
+            }
+            return Ok(());
+        }
+
+        let opcode = self.mmu.read(self.registers.pc.read())?;
+        log::trace!(
+            "cycle: opcode 0x{opcode:x?}, pc: 0x{:x?}",
+            self.registers.pc.read()
+        );
+        if self.logging {
+            println!(
+                "A: {:02X?} F: {:02X?} B: {:02X?} C: {:02X?} D: {:02X?} E: {:02X?} H: {:02X?} L: {:02X?} SP: {:04X?} PC: 00:{:04X?} ({:02X?} {:02X?} {:02X?} {:02X?}) (HL): {:02X?}",
+                self.registers.af.high.read(),
+                self.registers.af.low.read(),
+                self.registers.bc.high.read(),
+                self.registers.bc.low.read(),
+                self.registers.de.high.read(),
+                self.registers.de.low.read(),
+                self.registers.hl.high.read(),
+                self.registers.hl.low.read(),
+                self.registers.sp.read(),
+                self.registers.pc.read(),
+                self.mmu.read(self.registers.pc.read())?,
+                self.mmu.read(self.registers.pc.read() + 1)?,
+                self.mmu.read(self.registers.pc.read() + 2)?,
+                self.mmu.read(self.registers.pc.read() + 3)?,
+                self.mmu.read(self.registers.hl.read())?
+            );
+        }
+
+        self.execute(opcode)?;
+
         Ok(())
     }
 }
