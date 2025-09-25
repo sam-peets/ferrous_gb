@@ -95,7 +95,7 @@ impl Mbc for Mbc1 {
 }
 
 impl Mbc1 {
-    pub fn new(rom: Vec<u8>, rom_banks: usize, ram_banks: usize, battery: bool) -> Self {
+    pub fn new(rom: &[u8], rom_banks: usize, ram_banks: usize, battery: bool) -> Self {
         let rom = rom.chunks(0x4000).map(|x| x.to_vec()).collect();
         let ram = vec![vec![0; 0x2000]; ram_banks];
         Self {

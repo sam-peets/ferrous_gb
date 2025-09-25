@@ -8,10 +8,10 @@ pub struct RomOnly {
     ram: Vec<u8>,
 }
 
-impl TryFrom<Vec<u8>> for RomOnly {
+impl TryFrom<&[u8]> for RomOnly {
     type Error = anyhow::Error;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         let rom = value[0..=0x7fff].to_vec();
         let ram = vec![0u8; 0x2000];
         Ok(RomOnly { rom, ram })

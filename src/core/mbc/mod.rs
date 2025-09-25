@@ -23,7 +23,7 @@ pub struct CartridgeHeader {
 }
 
 impl CartridgeHeader {
-    pub fn new(rom: &Vec<u8>) -> anyhow::Result<Self> {
+    pub fn new(rom: &[u8]) -> anyhow::Result<Self> {
         let title = String::from_utf8_lossy(&rom[0x134..=0x143]).to_string();
         let cartridge_type = rom[0x147].try_into()?;
         let rom_banks = match rom[0x148] {
@@ -51,19 +51,17 @@ impl CartridgeHeader {
         };
 
         let mbc: Box<dyn Mbc> = match cartridge_type {
-            Mapper::RomOnly => Box::new(RomOnly::try_from(rom.clone())?),
-            Mapper::Mbc1 => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, false)),
-            Mapper::Mbc1Ram => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, false)),
-            Mapper::Mbc1RamBattery => Box::new(Mbc1::new(rom.clone(), rom_banks, ram_banks, true)),
-            Mapper::Mbc3RamBattery => {
-                Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, true, false))
-            }
+            Mapper::RomOnly => Box::new(RomOnly::try_from(rom)?),
+            Mapper::Mbc1 => Box::new(Mbc1::new(rom, rom_banks, ram_banks, false)),
+            Mapper::Mbc1Ram => Box::new(Mbc1::new(rom, rom_banks, ram_banks, false)),
+            Mapper::Mbc1RamBattery => Box::new(Mbc1::new(rom, rom_banks, ram_banks, true)),
+            Mapper::Mbc3RamBattery => Box::new(Mbc3::new(rom, rom_banks, ram_banks, true, false)),
             Mapper::Mbc3TimerRamBattery => {
-                Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, true, true))
+                Box::new(Mbc3::new(rom, rom_banks, ram_banks, true, true))
             }
-            Mapper::Mbc3 => Box::new(Mbc3::new(rom.clone(), rom_banks, ram_banks, false, false)),
-            Mapper::Mbc5 => Box::new(Mbc5::new(rom.clone(), rom_banks, ram_banks, false)),
-            Mapper::Mbc5RamBattery => Box::new(Mbc5::new(rom.clone(), rom_banks, ram_banks, true)),
+            Mapper::Mbc3 => Box::new(Mbc3::new(rom, rom_banks, ram_banks, false, false)),
+            Mapper::Mbc5 => Box::new(Mbc5::new(rom, rom_banks, ram_banks, false)),
+            Mapper::Mbc5RamBattery => Box::new(Mbc5::new(rom, rom_banks, ram_banks, true)),
             m => todo!("mmu: unimplemented mapper: {m:?}"),
         };
 

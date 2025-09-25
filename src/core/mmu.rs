@@ -2,7 +2,6 @@ use anyhow::anyhow;
 
 use crate::core::{Buttons, Mode, apu::Apu, mbc::CartridgeHeader};
 
-// const BOOT: &[u8] = include_bytes!("../../dmg_boot.bin");
 const BOOT: &[u8] = include_bytes!("../../assets/bootix_dmg.bin");
 
 #[derive(Default, Debug)]
@@ -45,12 +44,12 @@ pub struct Mmu {
 }
 
 impl Mmu {
-    pub fn new(rom: Vec<u8>, sample_rate: u32) -> anyhow::Result<Self> {
+    pub fn new(rom: &[u8], sample_rate: u32) -> anyhow::Result<Self> {
         let io = IoRegisters {
             ..Default::default()
         };
 
-        let header = CartridgeHeader::new(&rom)?;
+        let header = CartridgeHeader::new(rom)?;
 
         let mmu = Self {
             io,
@@ -60,7 +59,7 @@ impl Mmu {
             oam: vec![0; 0x100],
             hram: vec![0; 0x7f],
             dma_requsted: false,
-            buttons: Default::default(),
+            buttons: Buttons::default(),
             ppu_mode: Mode::OamScan,
             cartridge: header,
             sys: 0,
@@ -88,42 +87,9 @@ impl Mmu {
             0xfea0..=0xfeff => Ok(0xff), // invalid read, just return 0xff
             0xff00..=0xff7f => match a {
                 0xff00 => {
-                    let joyp = self.io.joyp & 0b00110000;
-                    match joyp >> 4 {
-                        0b10 => {
-                            let mut r = 0;
-                            if !self.buttons.down {
-                                r |= 0b1000;
-                            }
-                            if !self.buttons.up {
-                                r |= 0b0100;
-                            }
-                            if !self.buttons.left {
-                                r |= 0b0010;
-                            }
-                            if !self.buttons.right {
-                                r |= 0b0001;
-                            }
-                            Ok(joyp | r)
-                        }
-                        0b01 => {
-                            let mut r = 0;
-                            if !self.buttons.start {
-                                r |= 0b1000;
-                            }
-                            if !self.buttons.select {
-                                r |= 0b0100;
-                            }
-                            if !self.buttons.b {
-                                r |= 0b0010;
-                            }
-                            if !self.buttons.a {
-                                r |= 0b0001;
-                            }
-                            Ok(joyp | r)
-                        }
-                        _ => Ok(joyp | 0b00001111),
-                    }
+                    let joyp = self.io.joyp & 0b0011_0000;
+                    let buttons = self.buttons.as_joyp(joyp);
+                    Ok(joyp | buttons)
                 }
                 0xff02 => Ok(self.io.sc),
                 0xff04 => Ok(((self.sys & 0xff00) >> 8) as u8),
@@ -138,7 +104,7 @@ impl Mmu {
                 0xff41 => {
                     let mut v = self.io.stat;
                     if self.io.ly == self.io.lyc {
-                        v |= 0b00000100;
+                        v |= 0b0000_0100;
                     }
                     v |= self.ppu_mode as u8;
                     Ok(v)

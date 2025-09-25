@@ -15,7 +15,7 @@ impl GbApp {
         GbApp {
             promise: None,
             screen: None,
-            about_window: Default::default(),
+            about_window: AboutWindow::default(),
         }
     }
 }
@@ -38,7 +38,7 @@ impl GbApp {
                 }
                 ui.menu_button("Load Example", |ui| {
                     if ui.button("Tobu Tobu Girl").clicked() {
-                        self.promise = Some(poll_promise::Promise::from_ready(Some(TOBU.to_vec())))
+                        self.promise = Some(poll_promise::Promise::from_ready(Some(TOBU.to_vec())));
                     }
                 });
                 ui.separator();
@@ -66,10 +66,7 @@ impl eframe::App for GbApp {
                     .expect("failed to find a default output device");
                 let config = device.default_output_config().unwrap();
                 let sample_rate = config.sample_rate().0;
-                self.screen = Some(Screen::new(
-                    Cpu::new(rom.clone(), sample_rate).unwrap(),
-                    ctx,
-                ));
+                self.screen = Some(Screen::new(Cpu::new(rom, sample_rate).unwrap(), ctx));
                 self.promise = None;
             }
         }

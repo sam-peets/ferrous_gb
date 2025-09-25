@@ -139,7 +139,7 @@ impl Apu {
             self.ch3.clock_fast();
             self.ch4.clock_fast();
         }
-        if sys % (4194304 / self.sample_rate) as u16 == 0 {
+        if sys % (4_194_304 / self.sample_rate) as u16 == 0 {
             let sample = self.sample();
             let mut cur_sample = self
                 .cur_sample

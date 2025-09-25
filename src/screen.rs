@@ -9,7 +9,7 @@ use cpal::{
 };
 use egui::{Color32, Key, TextureHandle, Vec2};
 
-use crate::core::{Buttons, cpu::Cpu};
+use crate::core::{Buttons, cpu::Cpu, ppu::Ppu};
 
 #[derive(Default)]
 pub struct Debugger {
@@ -21,9 +21,8 @@ pub type ApuSamples = Arc<RwLock<VecDeque<(f32, f32)>>>;
 
 pub struct Screen {
     pub cpu: Cpu,
-    pub screen_texture: TextureHandle,
+    pub texture: TextureHandle,
     pub vram_texture: TextureHandle,
-    pub last_frame: u128,
     pub handle: Option<Handle>,
     pub debugger: Debugger,
 }
@@ -43,9 +42,8 @@ impl Screen {
         );
         Screen {
             cpu,
-            screen_texture,
+            texture: screen_texture,
             vram_texture,
-            last_frame: 0,
             handle,
             debugger: Debugger::default(),
         }
@@ -69,7 +67,7 @@ impl Screen {
         let f = self
             .cpu
             .ppu
-            .frame(&mut self.cpu.mmu)?
+            .frame(&mut self.cpu.mmu)
             .iter()
             .map(|x| match x {
                 0 => Color32::from_hex("#e0f8d0").unwrap(),
@@ -83,7 +81,7 @@ impl Screen {
     }
 
     fn vram_debug_frame(&mut self) -> anyhow::Result<Vec<Color32>> {
-        let v = self.cpu.ppu.dump_vram(&mut self.cpu.mmu)?;
+        let v = Ppu::dump_vram(&mut self.cpu.mmu)?;
         let f = v
             .iter()
             .map(|x| match x {
@@ -101,14 +99,14 @@ impl Screen {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         ui.ctx().request_repaint();
         let buttons = ui.input(|i| Buttons {
-            up: i.key_down(Key::ArrowUp),
-            down: i.key_down(Key::ArrowDown),
-            left: i.key_down(Key::ArrowLeft),
-            right: i.key_down(Key::ArrowRight),
-            start: i.key_down(Key::Enter),
-            select: i.key_down(Key::Space),
-            a: i.key_down(Key::A),
-            b: i.key_down(Key::B),
+            up: i.key_down(Key::ArrowUp).into(),
+            down: i.key_down(Key::ArrowDown).into(),
+            left: i.key_down(Key::ArrowLeft).into(),
+            right: i.key_down(Key::ArrowRight).into(),
+            start: i.key_down(Key::Enter).into(),
+            select: i.key_down(Key::Space).into(),
+            a: i.key_down(Key::A).into(),
+            b: i.key_down(Key::B).into(),
         });
         self.cpu.mmu.buttons = buttons;
         // TODO: Joypad interrupt
@@ -120,7 +118,7 @@ impl Screen {
                 panic!("error: {e}");
             }
         };
-        self.screen_texture.set(
+        self.texture.set(
             egui::ColorImage {
                 size: [160, 144],
                 source_size: Vec2::new(160.0, 144.0),
@@ -128,7 +126,7 @@ impl Screen {
             },
             egui::TextureOptions::NEAREST,
         );
-        let sized = egui::load::SizedTexture::from_handle(&self.screen_texture);
+        let sized = egui::load::SizedTexture::from_handle(&self.texture);
         let max_size = 2.0 * Vec2::new(160.0, 144.0);
         let min_size = ui.available_size();
         let target_size = min_size.min(max_size);
@@ -174,13 +172,12 @@ fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, apu_data: ApuSampl
 where
     T: SizedSample + FromSample<f32>,
 {
-    let sample_rate = config.sample_rate.0 as f32;
     let channels = config.channels as usize;
 
     let stream = device
         .build_output_stream(
             config,
-            move |data: &mut [T], _| write_data(data, channels, apu_data.clone()),
+            move |data: &mut [T], _| write_data(data, channels, &apu_data),
             |x| log::error!("stream error: {x:?}"),
             None,
         )
@@ -189,7 +186,7 @@ where
     stream
 }
 
-fn write_data<T>(output: &mut [T], channels: usize, samples: ApuSamples)
+fn write_data<T>(output: &mut [T], channels: usize, samples: &ApuSamples)
 where
     T: SizedSample + FromSample<f32>,
 {
@@ -200,18 +197,15 @@ where
     for frame in chunks {
         let (sample_left, sample_right) = samples.pop_front().unwrap_or_default();
 
-        match channels {
-            2 => {
-                let value_left: T = T::from_sample(sample_left);
-                let value_right: T = T::from_sample(sample_right);
-                frame[0] = value_left;
-                frame[1] = value_right;
-            }
-            _ => {
-                let value: T = T::from_sample((sample_left + sample_right) / 2.0);
-                for sample in frame.iter_mut() {
-                    *sample = value;
-                }
+        if channels == 2 {
+            let value_left: T = T::from_sample(sample_left);
+            let value_right: T = T::from_sample(sample_right);
+            frame[0] = value_left;
+            frame[1] = value_right;
+        } else {
+            let value: T = T::from_sample(f32::midpoint(sample_left, sample_right));
+            for sample in frame.iter_mut() {
+                *sample = value;
             }
         }
     }
