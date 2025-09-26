@@ -29,7 +29,7 @@ pub struct Screen {
 
 impl Screen {
     pub fn new(cpu: Cpu, ctx: &egui::Context) -> Self {
-        let handle = Some(beep(cpu.mmu.apu.cur_sample.clone()));
+        let handle = Some(create_audio_handle(cpu.mmu.mmio.apu.cur_sample.clone()));
         let screen_texture = ctx.load_texture(
             "screen",
             egui::ColorImage::filled([160, 144], Color32::BLACK),
@@ -51,14 +51,14 @@ impl Screen {
 
     pub fn frame(&mut self) -> anyhow::Result<Vec<Color32>> {
         // sync the cpu to the audio
-        if self.cpu.mmu.apu.cur_sample.read().unwrap().len() <= MAX_AUDIO_BUFFER {
+        if self.cpu.mmu.mmio.apu.cur_sample.read().unwrap().len() <= MAX_AUDIO_BUFFER {
             for _ in 0..70224 {
                 // is this right?
                 self.cpu.cycle()?;
-                self.cpu.mmu.apu.clock(self.cpu.mmu.sys);
-                self.cpu.ppu.clock(&mut self.cpu.mmu)?;
+                self.cpu.mmu.mmio.apu.clock(self.cpu.mmu.mmio.sys);
+                self.cpu.mmu.mmio.ppu.clock();
 
-                self.cpu.mmu.sys = self.cpu.mmu.sys.wrapping_add(1);
+                self.cpu.mmu.mmio.sys = self.cpu.mmu.mmio.sys.wrapping_add(1);
                 // TODO: add a way to look at falling edges on sys/div
                 // off the top of my head, APU needs it, timer needs it...
             }
@@ -66,8 +66,10 @@ impl Screen {
 
         let f = self
             .cpu
+            .mmu
+            .mmio
             .ppu
-            .frame(&mut self.cpu.mmu)
+            .frame()
             .iter()
             .map(|x| match x {
                 0 => Color32::from_hex("#e0f8d0").unwrap(),
@@ -108,7 +110,7 @@ impl Screen {
             a: i.key_down(Key::A).into(),
             b: i.key_down(Key::B).into(),
         });
-        self.cpu.mmu.buttons = buttons;
+        self.cpu.mmu.mmio.buttons = buttons;
         // TODO: Joypad interrupt
 
         let frame = match self.frame() {
@@ -152,7 +154,7 @@ impl Screen {
 
 pub struct Handle(Stream);
 
-pub fn beep(data: ApuSamples) -> Handle {
+pub fn create_audio_handle(data: ApuSamples) -> Handle {
     let host = cpal::default_host();
     let device = host
         .default_output_device()

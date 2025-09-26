@@ -88,7 +88,7 @@ impl Channel for Ch4 {
     }
 
     fn write(&mut self, div_apu: u8, addr: u16, val: u8, _: bool) {
-        println!("Ch4: write: {addr:04x?} = {val:02x?}");
+        // println!("Ch4: write: {addr:04x?} = {val:02x?}");
         match addr {
             // NR41
             0xff20 => {
@@ -114,7 +114,7 @@ impl Channel for Ch4 {
             // NR44
             0xff23 => {
                 let length_enable = (val & 0b0100_0000) > 0;
-                println!("ch4: trigger: {val:08b}");
+                // println!("ch4: trigger: {val:08b}");
                 if self.length.write_nrx4(length_enable, div_apu) {
                     self.enabled = false;
                 }
