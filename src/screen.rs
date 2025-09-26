@@ -1,5 +1,7 @@
 use std::{
+    cell::RefCell,
     collections::VecDeque,
+    rc::Rc,
     sync::{Arc, RwLock},
 };
 
@@ -9,7 +11,11 @@ use cpal::{
 };
 use egui::{Color32, Key, TextureHandle, Vec2};
 
-use crate::core::{Buttons, cpu::Cpu, ppu::Ppu};
+use crate::{
+    audio_handle::Handle,
+    client_config::ClientConfigShared,
+    core::{Buttons, cpu::Cpu, ppu::Ppu},
+};
 
 #[derive(Default)]
 pub struct Debugger {
@@ -25,11 +31,15 @@ pub struct Screen {
     pub vram_texture: TextureHandle,
     pub handle: Option<Handle>,
     pub debugger: Debugger,
+    pub config: ClientConfigShared,
 }
 
 impl Screen {
-    pub fn new(cpu: Cpu, ctx: &egui::Context) -> Self {
-        let handle = Some(create_audio_handle(cpu.mmu.mmio.apu.cur_sample.clone()));
+    pub fn new(cpu: Cpu, config: ClientConfigShared, ctx: &egui::Context) -> Self {
+        let handle = Some(Handle::new(
+            cpu.mmu.mmio.apu.cur_sample.clone(),
+            config.clone(),
+        ));
         let screen_texture = ctx.load_texture(
             "screen",
             egui::ColorImage::filled([160, 144], Color32::BLACK),
@@ -46,6 +56,7 @@ impl Screen {
             vram_texture,
             handle,
             debugger: Debugger::default(),
+            config,
         }
     }
 
@@ -146,67 +157,6 @@ impl Screen {
                 let sized = egui::load::SizedTexture::from_handle(&self.vram_texture);
                 ui.add(egui::Image::new(sized));
             });
-        }
-    }
-}
-
-pub struct Handle(Stream);
-
-pub fn create_audio_handle(data: ApuSamples) -> Handle {
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .expect("failed to find a default output device");
-    let config = device.default_output_config().unwrap();
-
-    Handle(match config.sample_format() {
-        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), data),
-        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), data),
-        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), data),
-        // not all supported sample formats are included in this example
-        _ => panic!("Unsupported sample format!"),
-    })
-}
-
-fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, apu_data: ApuSamples) -> Stream
-where
-    T: SizedSample + FromSample<f32>,
-{
-    let channels = config.channels as usize;
-
-    let stream = device
-        .build_output_stream(
-            config,
-            move |data: &mut [T], _| write_data(data, channels, &apu_data),
-            |x| log::error!("stream error: {x:?}"),
-            None,
-        )
-        .unwrap();
-    stream.play().unwrap();
-    stream
-}
-
-fn write_data<T>(output: &mut [T], channels: usize, samples: &ApuSamples)
-where
-    T: SizedSample + FromSample<f32>,
-{
-    let mut samples = samples.write().expect("Screen: couldn't unlock samples");
-
-    let chunks = output.chunks_mut(channels);
-
-    for frame in chunks {
-        let (sample_left, sample_right) = samples.pop_front().unwrap_or_default();
-
-        if channels == 2 {
-            let value_left: T = T::from_sample(sample_left);
-            let value_right: T = T::from_sample(sample_right);
-            frame[0] = value_left;
-            frame[1] = value_right;
-        } else {
-            let value: T = T::from_sample(f32::midpoint(sample_left, sample_right));
-            for sample in frame.iter_mut() {
-                *sample = value;
-            }
         }
     }
 }

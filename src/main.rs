@@ -35,10 +35,8 @@ fn main() {
     let web_options = eframe::WebOptions::default();
 
     wasm_bindgen_futures::spawn_local(async {
-        let document = web_sys::window()
-            .expect("No window")
-            .document()
-            .expect("No document");
+        let window = web_sys::window().expect("No window");
+        let document = window.document().expect("No document");
 
         let canvas = document
             .get_element_by_id("the_canvas_id")
@@ -64,6 +62,9 @@ fn main() {
                     loading_text.set_inner_html(
                         "<p> The app has crashed. See the developer console for details. </p>",
                     );
+                    window
+                        .alert_with_message(&format!("Failed to start eframe: {e:?}"))
+                        .unwrap();
                     panic!("Failed to start eframe: {e:?}");
                 }
             }

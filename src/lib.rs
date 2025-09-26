@@ -8,6 +8,8 @@
 )]
 
 mod app;
+mod audio_handle;
+mod client_config;
 mod core;
 mod screen;
 pub use app::GbApp;

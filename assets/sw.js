@@ -4,8 +4,8 @@ var cacheName = cacheVersion + '-' + cacheGroup;
 var filesToCache = [
   './',
   './index.html',
-  './gbrs.js',
-  './gbrs_bg.wasm',
+  './ferrous-gb.js',
+  './ferrous-gb_bg.wasm',
 ];
 
 /* Start the service worker and cache all of the app's content */
