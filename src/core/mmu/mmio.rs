@@ -53,6 +53,7 @@ pub struct Mmio {
     tac: u8,  // 0xff07
     dma: u8,  // 0xff46
     bank: u8, // 0xff50 - bootrom mapping control
+    ie: u8,
 
     pub buttons: Buttons,
     pub apu: Apu,
@@ -103,6 +104,7 @@ impl Memory for Mmio {
             0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.read(addr), // PPU registers
             DMA => self.dma,
             BANK => self.bank,
+            IE => self.ie,
             _ => {
                 log::warn!("unimplemented IO reg read at {addr:x?}");
                 0xff
@@ -153,6 +155,7 @@ impl Memory for Mmio {
             BANK => {
                 self.bank = val;
             }
+            IE => self.ie = val,
             0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
                 self.apu.write(addr, val, self.sys);
             }

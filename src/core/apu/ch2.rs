@@ -1,5 +1,6 @@
 use crate::core::{
     apu::{Channel, duty_cycle::DutyCycle, envelope::Envelope, length::Length},
+    mmu::mmio::{NR21, NR22, NR23, NR24},
     util::extract,
 };
 
@@ -19,18 +20,18 @@ pub struct Ch2 {
 impl Channel for Ch2 {
     fn read(&self, addr: u16) -> u8 {
         match addr {
-            0xff16 => {
+            NR21 => {
                 let duty = self.duty_cycle.pattern << 6;
                 0b0011_1111 | duty
             }
-            0xff17 => {
+            NR22 => {
                 let volume = self.envelope.initial_volume << 4;
                 let dir = self.envelope.direction << 3;
                 let pace = self.envelope.pace;
                 volume | dir | pace
             }
-            0xff18 => 0xff, // write-only
-            0xff19 => {
+            NR23 => 0xff, // write-only
+            NR24 => {
                 let length = if self.length.enable { 1 << 6 } else { 0 };
                 length | 0b1011_1111
             }
@@ -40,7 +41,7 @@ impl Channel for Ch2 {
     fn write(&mut self, div_apu: u8, addr: u16, val: u8, enabled: bool) {
         // log::debug!("Ch2: write: {addr:04x?} = {val:02x?}");
         match addr {
-            0xff16 => {
+            NR21 => {
                 // length registers are writable when apu is disabled, but not duty
                 if enabled {
                     self.duty_cycle.pattern = extract(val, 0b1100_0000);
@@ -48,7 +49,7 @@ impl Channel for Ch2 {
                 self.length.length = 64 - extract(val, 0b0011_1111);
                 log::debug!("Ch2: write length: {}", self.length.length);
             }
-            0xff17 => {
+            NR22 => {
                 self.envelope.initial_volume = extract(val, 0b1111_0000);
                 self.envelope.direction = extract(val, 0b0000_1000);
                 self.envelope.pace = extract(val, 0b0000_0111);
@@ -57,10 +58,10 @@ impl Channel for Ch2 {
                     self.enabled = false;
                 }
             }
-            0xff18 => {
+            NR23 => {
                 self.period = (self.period & 0xff00) | u16::from(val);
             }
-            0xff19 => {
+            NR24 => {
                 self.period = ((u16::from(val) & 0b0000_0111) << 8) | self.period & 0xff;
                 let length_enable = (val & 0b0100_0000) > 0;
 

@@ -3,10 +3,7 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 
-use crate::{
-    client_config::{self, ClientConfigShared},
-    screen::ApuSamples,
-};
+use crate::{client_config::ClientConfigShared, screen::ApuSamples};
 
 pub struct Handle {
     stream: Stream,

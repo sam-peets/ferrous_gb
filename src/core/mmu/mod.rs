@@ -1,12 +1,15 @@
 pub mod mmio;
 
-use crate::core::{Memory, mbc::CartridgeHeader, mmu::mmio::Mmio};
+use crate::core::{
+    Memory,
+    mbc::CartridgeHeader,
+    mmu::mmio::{IE, Mmio},
+};
 
 const BOOT: &[u8] = include_bytes!("../../../assets/bootix_dmg.bin");
 
 #[derive(Debug)]
 pub struct Mmu {
-    pub ie: u8,
     wram: Vec<u8>,
     hram: Vec<u8>,
     pub mmio: Mmio,
@@ -21,7 +24,6 @@ impl Mmu {
 
         let mmu = Self {
             mmio: io,
-            ie: 0,
             wram: vec![0; 0x2000],
             hram: vec![0; 0x7f],
             cartridge: header,
@@ -40,13 +42,12 @@ impl Mmu {
                     self.cartridge.mbc.read(addr)
                 }
             }
-            0x8000..=0x9fff | 0xfe00..=0xfe9f | 0xff00..=0xff7f => self.mmio.read(addr),
+            0x8000..=0x9fff | 0xfe00..=0xfe9f | 0xff00..=0xff7f | 0xffff => self.mmio.read(addr),
             0xc000..=0xdfff => self.wram[a - 0xc000],
             0xe000..=0xfdff => self.read(addr - 0x2000), // echo ram
             // 0xfea0..=0xfeff => Err(anyhow!("prohibited read at {a:x?}")),
             0xfea0..=0xfeff => 0xff, // invalid read, just return 0xff
             0xff80..=0xfffe => self.hram[a - 0xff80],
-            0xffff => self.ie,
             _ => {
                 log::warn!("read out of bounds at 0x{addr:04x?}");
                 0xff
@@ -67,13 +68,11 @@ impl Mmu {
                 self.write(addr - 0x2000, val);
             }
             0xfea0..=0xfeff => (), // invalid write, do nothing
-            0x8000..=0x9fff | 0xfe00..=0xfe9f | 0xff00..=0xff7f => self.mmio.write(addr, val),
+            0x8000..=0x9fff | 0xfe00..=0xfe9f | 0xff00..=0xff7f | 0xffff => {
+                self.mmio.write(addr, val)
+            }
             0xff80..=0xfffe => {
                 self.hram[a - 0xff80] = val;
-            }
-            0xffff => {
-                log::debug!("write: IE write: 0x{val:02x?}");
-                self.ie = val;
             }
             _ => log::warn!("mmu: write: write out of bounds at {a:x?}"),
         }

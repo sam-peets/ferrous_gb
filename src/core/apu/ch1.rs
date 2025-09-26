@@ -1,5 +1,6 @@
 use crate::core::{
     apu::{Channel, duty_cycle::DutyCycle, envelope::Envelope, length::Length, sweep::Sweep},
+    mmu::mmio::{self, NR10, NR11, NR12, NR13, NR14},
     util::extract,
 };
 
@@ -20,24 +21,24 @@ pub struct Ch1 {
 impl Channel for Ch1 {
     fn read(&self, addr: u16) -> u8 {
         match addr {
-            0xff10 => {
+            NR10 => {
                 let shift = self.sweep.shift;
                 let direction = self.sweep.direction << 3;
                 let pace = self.sweep.pace << 4;
                 0b1000_0000 | pace | direction | shift
             }
-            0xff11 => {
+            NR11 => {
                 let duty = self.duty_cycle.pattern << 6;
                 0b0011_1111 | duty
             }
-            0xff12 => {
+            NR12 => {
                 let volume = self.envelope.initial_volume << 4;
                 let dir = self.envelope.direction << 3;
                 let pace = self.envelope.pace;
                 volume | dir | pace
             }
-            0xff13 => 0xff, // write-only
-            0xff14 => {
+            NR13 => 0xff, // write-only
+            NR14 => {
                 let length = if self.length.enable { 1 << 6 } else { 0 };
                 length | 0b1011_1111
             }
@@ -47,7 +48,7 @@ impl Channel for Ch1 {
     fn write(&mut self, div_apu: u8, addr: u16, val: u8, enabled: bool) {
         // log::debug!("Ch1: write: {addr:04x?} = {val:02x?}");
         match addr {
-            0xff10 => {
+            NR10 => {
                 self.sweep.pace = extract(val, 0b0111_0000);
                 self.sweep.direction = extract(val, 0b0000_1000);
                 self.sweep.shift = extract(val, 0b0000_0111);
@@ -58,7 +59,7 @@ impl Channel for Ch1 {
                     self.enabled = false;
                 }
             }
-            0xff11 => {
+            NR11 => {
                 // length registers are writable when apu is disabled, but not duty
                 if enabled {
                     self.duty_cycle.pattern = extract(val, 0b1100_0000);
@@ -66,7 +67,7 @@ impl Channel for Ch1 {
                 self.length.length = 64 - extract(val, 0b0011_1111);
                 log::debug!("Ch1: write length: {}", self.length.length);
             }
-            0xff12 => {
+            NR12 => {
                 self.envelope.initial_volume = extract(val, 0b1111_0000);
                 self.envelope.direction = extract(val, 0b0000_1000);
                 self.envelope.pace = extract(val, 0b0000_0111);
@@ -76,10 +77,10 @@ impl Channel for Ch1 {
                     self.enabled = false;
                 }
             }
-            0xff13 => {
+            NR13 => {
                 self.period = (self.period & 0xff00) | u16::from(val);
             }
-            0xff14 => {
+            NR14 => {
                 self.period = ((u16::from(val) & 0b0000_0111) << 8) | self.period & 0xff;
                 let trigger = (val & 0b1000_0000) > 0;
                 let length_enable = (val & 0b0100_0000) > 0;

@@ -3,12 +3,15 @@ mod ch2;
 mod ch3;
 mod ch4;
 mod duty_cycle;
-pub mod envelope;
+mod envelope;
 mod length;
 mod sweep;
 
 use crate::{
-    core::apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4},
+    core::{
+        apu::{ch1::Ch1, ch2::Ch2, ch3::Ch3, ch4::Ch4},
+        mmu::mmio::{NR10, NR14, NR21, NR24, NR30, NR34, NR41, NR44, NR50, NR51, NR52},
+    },
     screen::ApuSamples,
 };
 #[derive(Debug, Default)]
@@ -63,15 +66,15 @@ impl Apu {
         {
             // audio is enabled or writing to nr52/wave ram
             match addr {
-                0xff10..=0xff14 => self.ch1.write(self.div_apu, addr, val, self.enabled),
-                0xff16..=0xff19 => self.ch2.write(self.div_apu, addr, val, self.enabled),
-                0xff1a..=0xff1e | 0xff30..=0xff3f => {
+                NR10..=NR14 => self.ch1.write(self.div_apu, addr, val, self.enabled),
+                NR21..=NR24 => self.ch2.write(self.div_apu, addr, val, self.enabled),
+                NR30..=NR34 | 0xff30..=0xff3f => {
                     self.ch3.write(self.div_apu, addr, val, self.enabled);
                 }
-                0xff20..=0xff23 => self.ch4.write(self.div_apu, addr, val, self.enabled),
-                0xff24 => self.nr50 = val,
-                0xff25 => self.nr51 = val,
-                0xff26 => {
+                NR41..=NR44 => self.ch4.write(self.div_apu, addr, val, self.enabled),
+                NR50 => self.nr50 = val,
+                NR51 => self.nr51 = val,
+                NR52 => {
                     let set_enabled = val & 0b1000_0000;
                     if set_enabled > 0 && !self.enabled {
                         // disabled -> enabled transition
@@ -88,13 +91,13 @@ impl Apu {
     }
     pub fn read(&self, addr: u16, sys: u16) -> u8 {
         let v = match addr {
-            0xff10..=0xff14 => self.ch1.read(addr),
-            0xff16..=0xff19 => self.ch2.read(addr),
-            0xff1a..=0xff1e | 0xff30..=0xff3f => self.ch3.read(addr),
-            0xff20..=0xff23 => self.ch4.read(addr),
-            0xff24 => self.nr50,
-            0xff25 => self.nr51,
-            0xff26 => {
+            NR10..=NR14 => self.ch1.read(addr),
+            NR21..=NR24 => self.ch2.read(addr),
+            NR30..=NR34 | 0xff30..=0xff3f => self.ch3.read(addr),
+            NR41..=NR44 => self.ch4.read(addr),
+            NR50 => self.nr50,
+            NR51 => self.nr51,
+            NR52 => {
                 let ch_enabled = {
                     let mut enabled = 0;
                     if self.ch1.enabled {

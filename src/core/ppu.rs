@@ -1,4 +1,11 @@
-use crate::core::{Memory, Mode, mmu::Mmu, util::bit};
+use crate::core::{
+    Memory, Mode,
+    mmu::{
+        Mmu,
+        mmio::{BGP, LCDC, LY, LYC, OBP0, OBP1, SCX, SCY, STAT, WX, WY},
+    },
+    util::bit,
+};
 
 const WIDTH: usize = 160;
 #[allow(dead_code)] // We never use this... but doesn't it feel weird not to have it as a constant?
@@ -48,8 +55,8 @@ impl Memory for Ppu {
     fn read(&self, addr: u16) -> u8 {
         let a = addr as usize;
         match addr {
-            0xff40 => self.lcdc,
-            0xff41 => {
+            LCDC => self.lcdc,
+            STAT => {
                 let mut v = self.stat;
                 if self.ly == self.lyc {
                     v |= 0b0000_0100;
@@ -57,15 +64,15 @@ impl Memory for Ppu {
                 v |= self.mode as u8;
                 v
             }
-            0xff42 => self.scy,
-            0xff43 => self.scx,
-            0xff44 => self.ly,
-            0xff45 => self.lyc,
-            0xff47 => self.bgp,
-            0xff48 => self.obp0,
-            0xff49 => self.obp1,
-            0xff4a => self.wy,
-            0xff4b => self.wx,
+            SCY => self.scy,
+            SCX => self.scx,
+            LY => self.ly,
+            LYC => self.lyc,
+            BGP => self.bgp,
+            OBP0 => self.obp0,
+            OBP1 => self.obp1,
+            WY => self.wy,
+            WX => self.wx,
             0x8000..=0x9fff => self.vram[a - 0x8000],
             0xfe00..=0xfe9f => self.oam[a - 0xfe00],
             _ => unreachable!("Ppu: Memory: invalid read 0x{addr:04x?}"),
@@ -81,43 +88,43 @@ impl Memory for Ppu {
             0xfe00..=0xfe9f => {
                 self.oam[a - 0xfe00] = val;
             }
-            0xff40 => {
+            LCDC => {
                 log::debug!("mmu: LCDC write: 0x{val:x?}");
                 self.lcdc = val;
             }
-            0xff41 => {
+            STAT => {
                 log::debug!("mmu: STAT write: 0x{val:x?}");
                 self.stat = val & 0b0111_1000;
             }
-            0xff42 => {
+            SCY => {
                 log::debug!("mmu: SCY write: 0x{val:x?}");
                 self.scy = val;
             }
-            0xff43 => {
+            SCX => {
                 log::debug!("mmu: SCX write: 0x{val:x?}");
                 self.scx = val;
             }
-            0xff44 => {
+            LY => {
                 // read-only
             }
-            0xff45 => {
+            LYC => {
                 log::debug!("mmu: LYC write: 0x{val:x?}");
                 self.lyc = val;
             }
-            0xff47 => {
+            BGP => {
                 log::debug!("mmu: BGP write: 0x{val:x?}");
                 self.bgp = val;
             }
-            0xff48 => {
+            OBP0 => {
                 self.obp0 = val;
             }
-            0xff49 => {
+            OBP1 => {
                 self.obp1 = val;
             }
-            0xff4a => {
+            WY => {
                 self.wy = val;
             }
-            0xff4b => {
+            WX => {
                 self.wx = val;
             }
             _ => unreachable!("Ppu: Memory: invalid write 0x{addr:04x?}"),

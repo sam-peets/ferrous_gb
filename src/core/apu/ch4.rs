@@ -1,5 +1,6 @@
 use crate::core::{
     apu::{Channel, envelope::Envelope, length::Length},
+    mmu::mmio::{NR41, NR42, NR43, NR44},
     util::extract,
 };
 
@@ -66,20 +67,20 @@ impl Channel for Ch4 {
 
     fn read(&self, addr: u16) -> u8 {
         match addr {
-            0xff20 => 0xff,
-            0xff21 => {
+            NR41 => 0xff,
+            NR42 => {
                 let volume = self.envelope.initial_volume << 4;
                 let dir = self.envelope.direction << 3;
                 let pace = self.envelope.pace;
                 volume | dir | pace
             }
-            0xff22 => {
+            NR43 => {
                 let clock = self.clock_shift << 4;
                 let width = self.lfsr_width << 3;
                 let div = self.clock_divider;
                 clock | width | div
             }
-            0xff23 => {
+            NR44 => {
                 let length = if self.length.enable { 1 << 6 } else { 0 };
                 0b1011_1111 | length
             }
@@ -91,12 +92,12 @@ impl Channel for Ch4 {
         // println!("Ch4: write: {addr:04x?} = {val:02x?}");
         match addr {
             // NR41
-            0xff20 => {
+            NR41 => {
                 self.length.length = 64 - extract(val, 0b0011_1111);
                 log::debug!("Ch4: write length: {}", self.length.length);
             }
             // NR42
-            0xff21 => {
+            NR42 => {
                 self.envelope.initial_volume = extract(val, 0b1111_0000);
                 self.envelope.direction = extract(val, 0b0000_1000);
                 self.envelope.pace = extract(val, 0b0000_0111);
@@ -106,13 +107,13 @@ impl Channel for Ch4 {
                 }
             }
             // NR43
-            0xff22 => {
+            NR43 => {
                 self.clock_shift = extract(val, 0b1111_0000);
                 self.lfsr_width = extract(val, 0b0000_1000);
                 self.clock_divider = extract(val, 0b0000_0111);
             }
             // NR44
-            0xff23 => {
+            NR44 => {
                 let length_enable = (val & 0b0100_0000) > 0;
                 // println!("ch4: trigger: {val:08b}");
                 if self.length.write_nrx4(length_enable, div_apu) {

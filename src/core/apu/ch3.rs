@@ -1,5 +1,6 @@
 use crate::core::{
     apu::{Channel, length::Length},
+    mmu::mmio::{NR24, NR30, NR31, NR32, NR33, NR34, NR41, NR42},
     util::extract,
 };
 
@@ -43,16 +44,16 @@ impl Channel for Ch3 {
 
     fn read(&self, addr: u16) -> u8 {
         match addr {
-            0xff1a => {
+            NR30 => {
                 let dac_enabled = if self.dac_enabled { 1 << 7 } else { 0 };
                 dac_enabled | 0b0111_1111
             }
-            0xff1c => {
+            NR32 => {
                 let initial_volume = self.initial_volume << 5;
                 initial_volume | 0b1001_1111
             }
-            0xff1b | 0xff1d => 0xff, // write-only
-            0xff1e => {
+            NR31 | NR33 => 0xff, // write-only
+            NR34 => {
                 let length_enable = if self.length.enable { 1 << 6 } else { 0 };
                 length_enable | 0b1011_1111
             }
@@ -72,23 +73,23 @@ impl Channel for Ch3 {
     fn write(&mut self, div_apu: u8, addr: u16, val: u8, _: bool) {
         // log::debug!("Ch3: write: {addr:04x?} = {val:02x?}");
         match addr {
-            0xff1a => {
+            NR30 => {
                 self.dac_enabled = (val & 0b1000_0000) > 0;
                 if !self.dac_enabled {
                     self.enabled = false;
                 }
             }
-            0xff1b => {
+            NR31 => {
                 self.length.length = 256 - u16::from(val);
                 log::debug!("Ch3: write length: {}", self.length.length);
             }
-            0xff1c => {
+            NR32 => {
                 self.initial_volume = extract(val, 0b0110_0000);
             }
-            0xff1d => {
+            NR33 => {
                 self.period = (self.period & 0xff00) | u16::from(val);
             }
-            0xff1e => {
+            NR34 => {
                 self.period = (self.period & 0x00ff) | (u16::from(val & 0b0000_0111) << 8);
                 let length_enable = (val & 0b0100_0000) > 0;
 

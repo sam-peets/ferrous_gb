@@ -121,27 +121,28 @@ impl Cpu {
     }
 
     fn cycle_interrupts(&mut self) {
-        let interrupt = self.mmu.mmio.read(mmio::IF);
-        if self.ime && (self.mmu.ie & interrupt) > 0 {
+        let i_flag = self.mmu.mmio.read(mmio::IF);
+        let i_enable = self.mmu.mmio.read(mmio::IE);
+        if self.ime && (i_enable & i_flag) > 0 {
             // interrupts are enabled and at least one has been requested
             log::debug!("interrupts are enabled and one has been requested");
-            if (self.mmu.ie & interrupt & 0b0000_0001) > 0 {
+            if (i_enable & i_flag & 0b0000_0001) > 0 {
                 // vblank
                 log::debug!("cycle: servicing vblank interrupt");
                 self.call_interrupt(0x40, 0);
-            } else if (self.mmu.ie & interrupt & 0b0000_0010) > 0 {
+            } else if (i_enable & i_flag & 0b0000_0010) > 0 {
                 // lcd
                 log::debug!("cycle: servicing lcd interrupt");
                 self.call_interrupt(0x48, 1);
-            } else if (self.mmu.ie & interrupt & 0b0000_0100) > 0 {
+            } else if (i_enable & i_flag & 0b0000_0100) > 0 {
                 // timer
                 log::debug!("cycle: servicing timer interrupt");
                 self.call_interrupt(0x50, 2);
-            } else if (self.mmu.ie & interrupt & 0b0000_1000) > 0 {
+            } else if (i_enable & i_flag & 0b0000_1000) > 0 {
                 // serial
                 log::debug!("cycle: servicing serial interrupt");
                 self.call_interrupt(0x58, 3);
-            } else if (self.mmu.ie & interrupt & 0b0001_0000) > 0 {
+            } else if (i_enable & i_flag & 0b0001_0000) > 0 {
                 // joypad
                 log::debug!("cycle: servicing joypad interrupt");
                 self.call_interrupt(0x60, 4);
@@ -352,7 +353,7 @@ impl Cpu {
         self.cycle_interrupts();
 
         if self.halted {
-            if (self.mmu.ie & self.mmu.mmio.read(mmio::IF)) > 0 {
+            if (self.mmu.mmio.read(mmio::IE) & self.mmu.mmio.read(mmio::IF)) > 0 {
                 self.halted = false;
             }
             return Ok(());
