@@ -3,7 +3,8 @@
     clippy::must_use_candidate,
     clippy::cast_possible_truncation,
     clippy::similar_names,
-    clippy::cast_precision_loss
+    clippy::cast_precision_loss,
+    clippy::struct_excessive_bools
 )]
 
 mod app;

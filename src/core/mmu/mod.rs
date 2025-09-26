@@ -1,8 +1,6 @@
 pub mod mmio;
 
-use crate::core::{
-    Buttons, Memory, Mode, apu::Apu, mbc::CartridgeHeader, mmu::mmio::Mmio, ppu::Ppu,
-};
+use crate::core::{Memory, mbc::CartridgeHeader, mmu::mmio::Mmio};
 
 const BOOT: &[u8] = include_bytes!("../../../assets/bootix_dmg.bin");
 
@@ -42,12 +40,11 @@ impl Mmu {
                     self.cartridge.mbc.read(addr)
                 }
             }
-            0x8000..=0x9fff | 0xfe00..=0xfe9f => self.mmio.read(addr),
+            0x8000..=0x9fff | 0xfe00..=0xfe9f | 0xff00..=0xff7f => self.mmio.read(addr),
             0xc000..=0xdfff => self.wram[a - 0xc000],
             0xe000..=0xfdff => self.read(addr - 0x2000), // echo ram
             // 0xfea0..=0xfeff => Err(anyhow!("prohibited read at {a:x?}")),
             0xfea0..=0xfeff => 0xff, // invalid read, just return 0xff
-            0xff00..=0xff7f => self.mmio.read(addr),
             0xff80..=0xfffe => self.hram[a - 0xff80],
             0xffff => self.ie,
             _ => {
@@ -67,11 +64,10 @@ impl Mmu {
             }
             0xe000..=0xfdff => {
                 log::warn!("writing {val:x?} to echo ram at {a:x?}, is this ok?");
-                self.write(addr - 0x2000, val)
+                self.write(addr - 0x2000, val);
             }
             0xfea0..=0xfeff => (), // invalid write, do nothing
-            0xff00..=0xff7f => self.mmio.write(addr, val),
-            0x8000..=0x9fff | 0xfe00..=0xfe9f => self.mmio.write(addr, val),
+            0x8000..=0x9fff | 0xfe00..=0xfe9f | 0xff00..=0xff7f => self.mmio.write(addr, val),
             0xff80..=0xfffe => {
                 self.hram[a - 0xff80] = val;
             }

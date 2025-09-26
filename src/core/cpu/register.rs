@@ -1,7 +1,4 @@
-use std::{
-    ops::{AddAssign, DivAssign, MulAssign, SubAssign},
-    process::Output,
-};
+use std::ops::{AddAssign, DivAssign, MulAssign, SubAssign};
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Register16 {
@@ -13,7 +10,7 @@ impl AddAssign<u16> for Register16 {
     fn add_assign(&mut self, rhs: u16) {
         let s: u16 = (*self).into();
         let (s, _) = s.overflowing_add(rhs);
-        *self = s.into()
+        *self = s.into();
     }
 }
 
@@ -21,7 +18,7 @@ impl SubAssign<u16> for Register16 {
     fn sub_assign(&mut self, rhs: u16) {
         let s: u16 = (*self).into();
         let (s, _) = s.overflowing_sub(rhs);
-        *self = s.into()
+        *self = s.into();
     }
 }
 
@@ -29,7 +26,7 @@ impl MulAssign<u16> for Register16 {
     fn mul_assign(&mut self, rhs: u16) {
         let s: u16 = (*self).into();
         let (s, _) = s.overflowing_mul(rhs);
-        *self = s.into()
+        *self = s.into();
     }
 }
 
@@ -37,7 +34,7 @@ impl DivAssign<u16> for Register16 {
     fn div_assign(&mut self, rhs: u16) {
         let s: u16 = (*self).into();
         let (s, _) = s.overflowing_div(rhs);
-        *self = s.into()
+        *self = s.into();
     }
 }
 
@@ -56,9 +53,9 @@ impl Register for Register16 {
 impl From<Register16> for u16 {
     fn from(val: Register16) -> Self {
         let high: u8 = val.high.into();
-        let high = high as u16;
+        let high = u16::from(high);
         let low: u8 = val.low.into();
-        let low = low as u16;
+        let low = u16::from(low);
         (high << 8) | low
     }
 }
@@ -158,9 +155,9 @@ impl From<u16> for RegisterAF {
 impl From<RegisterAF> for u16 {
     fn from(value: RegisterAF) -> Self {
         let high: u8 = value.high.into();
-        let high: u16 = high as u16;
+        let high: u16 = u16::from(high);
         let low: u8 = value.low.into();
-        let low: u16 = low as u16;
+        let low: u16 = u16::from(low);
         (high << 8) | low
     }
 }
@@ -252,10 +249,10 @@ impl CpuRegisters {
 
     pub fn get_cond(&self, code: u8) -> bool {
         match code {
-            0b00 => self.af.low.z == false,
-            0b01 => self.af.low.z == true,
-            0b10 => self.af.low.c == false,
-            0b11 => self.af.low.c == true,
+            0b00 => !self.af.low.z,
+            0b01 => self.af.low.z,
+            0b10 => !self.af.low.c,
+            0b11 => self.af.low.c,
             _ => unreachable!("get_cond: unknown code: 0x{code:x?}"),
         }
     }

@@ -158,10 +158,6 @@ impl Default for Ppu {
 }
 
 impl Ppu {
-    pub fn new() -> Self {
-        Ppu::default()
-    }
-
     pub fn frame(&mut self) -> Vec<u8> {
         if (self.lcdc & 0b1000_0000) != 0 {
             // lcd is enabled
@@ -234,9 +230,8 @@ impl Ppu {
         let b1 = bit(b1, 7 - tile_col_d);
         let b2 = self.read(tile_row + 1);
         let b2 = bit(b2, 7 - tile_col_d);
-        let color = (b2 << 1) | b1;
 
-        color
+        (b2 << 1) | b1
     }
 
     fn draw_objects(&mut self) -> Option<(u8, bool, u8)> {
@@ -485,7 +480,7 @@ impl Ppu {
         }
     }
 
-    pub fn dump_vram(mmu: &mut Mmu) -> anyhow::Result<Vec<u8>> {
+    pub fn dump_vram(mmu: &mut Mmu) -> Vec<u8> {
         let mut out = vec![0; 32768];
         let base = 0x8000;
 
@@ -509,6 +504,6 @@ impl Ppu {
             }
         }
 
-        Ok(out)
+        out
     }
 }

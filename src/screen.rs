@@ -82,10 +82,10 @@ impl Screen {
         Ok(f)
     }
 
-    fn vram_debug_frame(&mut self) -> anyhow::Result<Vec<Color32>> {
-        let v = Ppu::dump_vram(&mut self.cpu.mmu)?;
-        let f = v
-            .iter()
+    fn vram_debug_frame(&mut self) -> Vec<Color32> {
+        let v = Ppu::dump_vram(&mut self.cpu.mmu);
+
+        v.iter()
             .map(|x| match x {
                 0 => Color32::from_hex("#e0f8d0").unwrap(),
                 1 => Color32::from_hex("#88c070").unwrap(),
@@ -93,9 +93,7 @@ impl Screen {
                 3 => Color32::from_hex("#081820").unwrap(),
                 _ => unreachable!(),
             })
-            .collect();
-
-        Ok(f)
+            .collect()
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
@@ -136,7 +134,7 @@ impl Screen {
 
         if self.debugger.show_vram {
             egui::Window::new("VRAM").show(ui.ctx(), |ui| {
-                let debug_frame = self.vram_debug_frame().unwrap();
+                let debug_frame = self.vram_debug_frame();
                 self.vram_texture.set(
                     egui::ColorImage {
                         size: [128, 64 * 4],

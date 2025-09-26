@@ -6,7 +6,6 @@ use crate::core::{
     Memory,
     cpu::register::{CpuRegisters, Register},
     mmu::{Mmu, mmio},
-    ppu::Ppu,
 };
 
 #[derive(Debug)]

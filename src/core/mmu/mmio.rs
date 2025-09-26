@@ -1,4 +1,4 @@
-use crate::core::{Buttons, Memory, apu::Apu, ppu::Ppu, util::extract};
+use crate::core::{Buttons, Memory, apu::Apu, ppu::Ppu};
 
 pub const JOYP: u16 = 0xff00;
 pub const SB: u16 = 0xff01;
@@ -74,11 +74,11 @@ impl Memory for Mmio {
                 joyp | buttons
             }
             SC => self.sc,
-            0xff04 => ((self.sys & 0xff00) >> 8) as u8,
-            0xff05 => self.tima,
-            0xff06 => self.tma,
-            0xff07 => self.tac,
-            0xff0f => {
+            DIV => ((self.sys & 0xff00) >> 8) as u8,
+            TIMA => self.tima,
+            TMA => self.tma,
+            TAC => self.tac,
+            IF => {
                 let mut interrupt = 0;
                 if self.ppu.vblank_if {
                     interrupt |= 1;
@@ -101,44 +101,44 @@ impl Memory for Mmio {
                 self.apu.read(addr, self.sys)
             }
             0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.read(addr), // PPU registers
-            0xff46 => self.dma,
+            DMA => self.dma,
             BANK => self.bank,
             _ => {
                 log::warn!("unimplemented IO reg read at {addr:x?}");
                 0xff
             }
-            _ => unreachable!(),
         }
     }
 
     fn write(&mut self, addr: u16, val: u8) {
         match addr {
-            0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.write(addr, val), // PPU registers
-            0x8000..=0x9fff | 0xfe00..=0xfe9f => self.ppu.write(addr, val), // PPU memory
-            0xff00 => {
+            0x8000..=0x9fff | 0xfe00..=0xfe9f | 0xff40..=0xff45 | 0xff47..=0xff4b => {
+                self.ppu.write(addr, val);
+            }
+            JOYP => {
                 self.joyp = val & 0b0011_0000;
             }
-            0xff01 => {
+            SB => {
                 // TODO: serial, logging for now for blargg
                 // print!("{}", val as char);
             }
-            0xff02 => {
+            SC => {
                 self.sc = val;
             }
-            0xff04 => {
+            DIV => {
                 // any write resets the divider/system clock to 0
                 self.sys = 0;
             }
-            0xff05 => {
+            TIMA => {
                 self.tima = val;
             }
-            0xff06 => {
+            TMA => {
                 self.tma = val;
             }
-            0xff07 => {
+            TAC => {
                 self.tac = val;
             }
-            0xff0f => {
+            IF => {
                 log::debug!("mmu: IF write: 0x{val:x?}");
                 self.ppu.vblank_if = (val & 0b0000_0001) > 0;
                 self.ppu.stat_if = (val & 0b0000_0010) > 0;
@@ -146,11 +146,11 @@ impl Memory for Mmio {
                 self.serial_if = (val & 0b0000_1000) > 0;
                 self.joypad_if = (val & 0b0001_0000) > 0;
             }
-            0xff46 => {
+            DMA => {
                 self.dma = val;
                 self.dma_requsted = true;
             }
-            0xff50 => {
+            BANK => {
                 self.bank = val;
             }
             0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
